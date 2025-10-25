@@ -69,9 +69,9 @@ The goal is to help architects, designers, normal people or hobbyists quickly pr
 ## Usage / Running the Project
 ### Training
 
-To train the GAN or Random Forest models from scratch, run the respective training scripts ![floor_generater](floor_generater.py) and ![room_predictor](room_predictor.py) respectively. 
-the ![floor_generater](floor_generater.py) will save the generator.pth, discriminator.pth model, and sample images per 10th epoch and will also save the checkpoint on every epoch.
-the ![room_predictor](room_predictor.py) will save the room_predictor.joblib model after training.
+To train the GAN or Random Forest models from scratch, run the respective training scripts [floor_generater](floor_generater.py) and [room_predictor](room_predictor.py) respectively. 
+the [floor_generater](floor_generater.py) will save the generator.pth, discriminator.pth model, and sample images per 10th epoch and will also save the checkpoint on every epoch.
+the [room_predictor](room_predictor.py) will save the room_predictor.joblib model after training.
 
 ### Generating Floor Plans
 
