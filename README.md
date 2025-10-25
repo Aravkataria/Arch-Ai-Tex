@@ -7,29 +7,30 @@
 1. [Project Overview](#project-overview)  
 2. [Motivation](#motivation)  
 3. [Key Features](#key-features)  
-4. [Architecture & Methods](#architecture-methods)  
+4. [Architecture & Methods](#architecture--methods)  
    - [Model Architecture](#model-architecture)  
-   - [Loss Functions & Training Details](#loss-functions-training-details)  
-   - [Dataset & Preprocessing](#dataset-preprocessing)  
-   - [Resolution / Output Details](#resolution-output-details)  
-5. [Project Structure](#project-structure)  
-6. [Installation Instructions](#installation-instructions)  
-7. [Usage / Running the Project](#usage-running-the-project)  
+   - [Loss Functions & Training Details](#loss-functions--training-details)  
+   - [Dataset & Preprocessing](#dataset--preprocessing)  
+   - [Resolution / Output Details](#resolution--output-details)  
+5. [Installation Instructions](#installation-instructions)  
+6. [Usage / Running the Project](#usage--running-the-project)  
    - [Training](#training)  
    - [Generating Floor Plans](#generating-floor-plans)  
    - [Viewing Results](#viewing-results)  
-8. [Results & Visualizations](#results-visualizations)  
-9. [Evaluation & Metrics](#evaluation-metrics)  
-10. [Limitations & Future Work](#limitations-future-work)  
-11. [Contributing](#contributing)  
-12. [License](#license)  
-13. [Acknowledgements](#acknowledgements)  
-14. [Contact / Author](#contact-author)  
-
+7. [Results & Visualizations](#results--visualizations)  
+8. [Evaluation & Metrics](#evaluation--metrics)  
+9. [Limitations & Future Work](#limitations--future-work)  
+10. [License](#license)  
 ---
 
 ## Project Overview  
-This project implements a system to generate house floor plans using GANs. It takes as input architectural layout data and produces new, **synthetic floor plans** that realistic spatial ordering. The goal is to help architects, designers, normal people or hobbyists quickly prototype layout ideas.
+This project implements a **deep generative model** to create realistic **house floor plans** automatically.  
+It combines **GAN-based architecture**, and **Random Forest regression** for estimating room area distributions.  
+The final output is a high-resolution, architecturally coherent layout image.
+
+The system can be extended for **conditional generation** (e.g., based on number of rooms or total area), serving as an **AI design assistant** for architects and planners.
+
+The goal is to help architects, designers, normal people or hobbyists quickly prototype layout ideas.
 
 ## Motivation  
 - Creating floor plans manually is time-consuming and requires domain knowledge in architecture.  
@@ -38,9 +39,8 @@ This project implements a system to generate house floor plans using GANs. It ta
 - This project also serves an academic interest in understanding how deep networks handle spatial/layout generation, generalization of designs, and evaluation of architecture-associated outputs.
 
 ## Key Features  
-- Generate floor plans given random/noise input (or conditional input, e.g., number of rooms).    
-- Visualize and compare generated designs versus dataset samples.  
-- Web-app interface to input parameters (number of rooms, square footage, style) and output downloadable floor plan PNG.  
+- Generate floor plans given random/noise input (or conditional input, e.g., number of rooms).
+- Visualize and compare generated designs versus dataset samples. - Web-app interface to input parameters (number of rooms, square footage, style) and output downloadable floor plan PNG.
 
 ## Architecture & Methods  
 
@@ -50,36 +50,30 @@ This project implements a system to generate house floor plans using GANs. It ta
 - **Discriminator**:
   The discriminator acts as a binary classifier helps in distinguishing between real and generated data. It learns to improve its classification ability through training, refining its parameters to detect fake samples more accurately. When dealing with image data, the discriminator uses convolutional layers or other relevant architectures which help to extract features and enhance the model’s ability.e.g., “Receives the generated or real floor plan image, passes through several convolutional layers with LeakyReLU activations, followed by a final sigmoid output indicating real vs fake.”  
 
-### Loss Functions & Training Details  
-- For GAN:  
-  - Discriminator loss:
-- 
+### Training Details  
 
-       $$ L_D = - \mathbb{E}_{x \sim p_\text{data}}[\log D(x)] 
-      - \mathbb{E}_{z \sim p_z}[\log(1 - D(G(z)))]$$
-
-  - Generator loss:
-- 
-
-       $$ L_G = - \mathbb{E}_{z \sim p_z}[\log D(G(z))] $$
-
-- Optimizer: e.g., Adam with \( \beta_1=0.5, \beta_2=0.999 \) and initial learning rate 2e-4.  
-- Batch size: e.g., 64.  
-- Number of epochs: e.g., 200.  
-- Learning rate schedule: e.g., halved every 50 epochs.  
-- Any regularization: e.g., spectral normalization in discriminator, gradient penalty, instance normalization.  
-- Data augmentation: flips, rotations, scaling to increase diversity.
+- Optimizer: Adam (lr=0.0002, β₁=0.5, β₂=0.999)
+- Batch size: 8  
+- Number of epochs: 100
 
 ### Dataset & Preprocessing  
-- Dataset: e.g., “We used the [NAME] dataset of house floor plan images (or: collected from architectural websites) comprising X samples of plans with number of rooms ranging from min to max.”  
 - Preprocessing steps:  
-  - Convert to grayscale or RGB.  
-  - Resize all images to e.g., 128×128 (or varying sizes).  
-  - Normalize pixel values to \([-1,1]\).  
-  - (Optional) Remove extraneous annotations, clean up layout, binarize walls vs empty space.  
+  - greayscale images are generated.  
+  - Resize all images to 256×256.  
+  - Normalize pixel values to [-1,1].
+  #### for room prediction
   - Split dataset into training and validation sets (e.g., 80% training, 20% validation).
 
 ### Resolution / Output Details  
-- The model supports multiple output resolutions: 64×64 (fast, low detail), 128×128 (moderate), 256×256 (higher detail).  
-- Explain how resolution affects training time, memory usage, model capacity.  
-- Discuss trade-offs: higher resolution yields more realistic floor plans but takes more GPU memory and longer training.
+- The model supports high output resolutions: 256×256.  
+- The images is saved as .png.
+- Optional denoising applied per user input.
+
+## Installation Instructions
+
+Follow these steps to set up the project locally:
+
+### 1. Clone the repository
+```bash
+   git clone https://github.com/AravKataria/house-floor-generator.git
+   cd house-floor-generator.```
