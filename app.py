@@ -7,8 +7,10 @@ import numpy as np
 import io
 from PIL import Image
 import warnings
-import cv2 
+import cv2
 
+# -----------------------
+# Streamlit Page Config
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
 # --- CONFIGURATION ---
@@ -17,7 +19,6 @@ LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
-
 
 # ===== GENERATOR (DCGAN Style for 256x256) =====
 class DCGAN_Generator(nn.Module):
@@ -85,17 +86,26 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         img_np = img_tensor.squeeze().cpu().numpy()
         img_np = ((img_np + 1) * 127.5).astype(np.uint8)
 
+        # Ensure proper shape for OpenCV denoiser
+        if CHANNELS == 1:
+            img_np = img_np
+        else:
+            img_np = np.transpose(img_np, (1, 2, 0))
+
         if denoise:
             img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
 
-        img_pil = Image.fromarray(img_np, 'L')
+        if CHANNELS == 1:
+            img_pil = Image.fromarray(img_np, 'L')
+        else:
+            img_pil = Image.fromarray(img_np)
+
         images.append(img_pil)
             
     return dwelling_type, images
 
 
-# --- Streamlit UI Setup --
-
+# --- Streamlit UI Setup ---
 st.markdown("""
 <style>
     .stButton>button {
@@ -113,10 +123,12 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
 st.title("Arch-Ai-Tex")
 st.markdown("### AI Floor Plan Generator")
 st.markdown("### Floorplan Generation based on Area and Rooms")
 
+# Input columns
 col_len, col_wid = st.columns(2)
 with col_len:
     house_length = st.number_input("Enter House Length (m)", min_value=10.0, max_value=10000.0, value=50.0, step=1.0)
@@ -124,12 +136,20 @@ with col_wid:
     house_width = st.number_input("Enter House Width/Depth (m)", min_value=10.0, max_value=10000.0, value=30.0, step=1.0)
 
 area = house_length * house_width
-st.markdown(f"**Calculated Total Area:** **{area:.2f} m.sq.**")
+st.markdown(f"**Calculated Total Area:** **{area:.2f} m²**")
 
 bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, max_value=8, value=3, step=1)
 denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
 st.markdown("---")
+
+# Initialize session state
+if 'generated' not in st.session_state:
+    st.session_state['generated'] = False
+    st.session_state['images'] = []
+    st.session_state['dwelling_type'] = None
+    st.session_state['area'] = area
+    st.session_state['bedrooms'] = bedrooms
 
 if st.button("Generate Optimized Floor Plans", type="primary", use_container_width=True):
     if area > 0 and bedrooms >= 0:
@@ -147,6 +167,7 @@ if st.button("Generate Optimized Floor Plans", type="primary", use_container_wid
     else:
         st.error("Please enter valid length, width, and bedroom values.")
 
+# Display generated images
 if st.session_state.get('generated'):
     st.divider()
     st.header("Generated Floor Plans")
