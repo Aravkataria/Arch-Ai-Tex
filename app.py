@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 import torch
 import torch.nn as nn
 import joblib
@@ -9,33 +8,18 @@ from PIL import Image
 import warnings
 import cv2
 
-# -----------------------
-# Streamlit Page Config
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-# --- CONFIGURATION ---
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
-# ===== GENERATOR (DCGAN Style for 256x256) =====
 class DCGAN_Generator(nn.Module):
-    # Move 'block' outside of __init__ and make it a static method
-    @staticmethod
-    def block(in_f, out_f):
-        return nn.Sequential(
-            nn.BatchNorm2d(in_f),
-            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
-            nn.ReLU(True)
-        )
-
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
         self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
-
-        # Call the static block method
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
@@ -44,10 +28,17 @@ class DCGAN_Generator(nn.Module):
             nn.Tanh()
         )
 
+    @staticmethod
+    def block(in_f, out_f):
+        return nn.Sequential(
+            nn.BatchNorm2d(in_f),
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
+            nn.ReLU(True)
+        )
+
     def forward(self, z):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
-
 
 @st.cache_resource
 def load_all_models():
@@ -66,16 +57,13 @@ def load_all_models():
     generator.eval()
     return rf_model_loaded, generator
 
-
 RF_MODEL, GAN_MODEL = load_all_models()
-
 
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Prediction Model Missing"
     features = np.array([[area, bedrooms]])
     return rf_model.predict(features)[0]
-
 
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
@@ -89,32 +77,20 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         img_np = img_tensor.squeeze().cpu().numpy()
         img_np = ((img_np + 1) * 127.5).astype(np.uint8)
 
-        # Ensure proper shape for OpenCV denoiser
-        if CHANNELS == 1:
-            img_np = img_np
-        else:
-            # Transpose C, H, W to H, W, C for color images if CHANNELS > 1
+        if CHANNELS != 1 and img_np.ndim == 3 and img_np.shape[0] == 3:
             img_np = np.transpose(img_np, (1, 2, 0))
 
-        if denoise and CHANNELS == 1:
-            # Use fastNlMeansDenoising for grayscale (CHANNELS=1)
-            img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
-        elif denoise and CHANNELS > 1:
-            # Use fastNlMeansDenoisingColor for color images
-            img_np = cv2.fastNlMeansDenoisingColor(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
+        if denoise:
+            if CHANNELS == 1:
+                img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
+            else:
+                img_np = cv2.fastNlMeansDenoisingColor(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
 
-
-        if CHANNELS == 1:
-            img_pil = Image.fromarray(img_np, 'L')
-        else:
-            img_pil = Image.fromarray(img_np)
-
+        img_pil = Image.fromarray(img_np, 'L' if CHANNELS == 1 else 'RGB')
         images.append(img_pil)
             
     return dwelling_type, images
 
-
-# --- Streamlit UI Setup ---
 st.markdown("""
 <style>
     .stButton>button {
@@ -137,7 +113,6 @@ st.title("Arch-Ai-Tex")
 st.markdown("### AI Floor Plan Generator")
 st.markdown("### Floorplan Generation based on Area and Rooms")
 
-# Input columns
 col_len, col_wid = st.columns(2)
 with col_len:
     house_length = st.number_input("Enter House Length (m)", min_value=10.0, max_value=10000.0, value=50.0, step=1.0)
@@ -152,7 +127,6 @@ denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
 st.markdown("---")
 
-# Initialize session state
 if 'generated' not in st.session_state:
     st.session_state['generated'] = False
     st.session_state['images'] = []
@@ -176,7 +150,6 @@ if st.button("Generate Optimized Floor Plans", type="primary", use_container_wid
     else:
         st.error("Please enter valid length, width, and bedroom values.")
 
-# Display generated images
 if st.session_state.get('generated'):
     st.divider()
     st.header("Generated Floor Plans")
@@ -185,7 +158,7 @@ if st.session_state.get('generated'):
         img_buffer = io.BytesIO()
         img.save(img_buffer, format="PNG")
         with cols[i]:
-            st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
+            st.image(np.array(img), caption=f"Plan {i+1} (256x256)", use_container_width=True)
             st.download_button(
                 label=f"Download Plan {i+1}",
                 data=img_buffer.getvalue(),
