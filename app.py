@@ -178,19 +178,23 @@ if st.button("Generate Optimized Floor Plans", type="primary", use_container_wid
 if st.session_state.get('generated'):
     st.divider()
     st.header("Generated Floor Plans")
-    cols = st.columns(3)
+    cols = st.columns(len(st.session_state['images']))  # dynamic number of columns
     for i, img in enumerate(st.session_state['images']):
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format="PNG")
-        with cols[i]:
-            st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
-            st.download_button(
-                label=f"Download Plan {i+1}",
-                data=img_buffer.getvalue(),
-                file_name=f"plan_{i+1}_Area{int(st.session_state['area'])}sqft_Beds{st.session_state['bedrooms']}.png",
-                mime="image/png",
-                key=f"download_{i}",
-                use_container_width=True
-            )
+        if img is not None:
+            # Convert to valid PIL Image if somehow it isn't
+            if not isinstance(img, Image.Image):
+                img = Image.fromarray(np.array(img).astype(np.uint8))
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            with cols[i]:
+                st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
+                st.download_button(
+                    label=f"Download Plan {i+1}",
+                    data=img_buffer.getvalue(),
+                    file_name=f"plan_{i+1}_Area{int(st.session_state['area'])}sqft_Beds{st.session_state['bedrooms']}.png",
+                    mime="image/png",
+                    key=f"download_{i}",
+                    use_container_width=True
+                )
 
 st.divider()
