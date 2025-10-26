@@ -25,7 +25,7 @@ This project implements a **deep generative model** to create realistic **house 
 It combines **GAN-based architecture**, and **Random Forest regression** for estimating room area distributions.  
 The final output is a high-resolution, architecturally coherent layout image.
 
-The system can be extended for **conditional generation** (e.g., based on number of rooms or total area), serving as an **AI design assistant** for architects and planners.
+The system can be extended for **conditional generation** (e.g., based on number of rooms or length and breath), serving as an **AI design assistant** for architects and planners.
 
 The goal is to help architects, designers, normal people or hobbyists quickly prototype layout ideas.
 
@@ -78,7 +78,8 @@ the [room_predictor](room_predictor.py) will save the room_predictor.joblib mode
 To generate a new floor plan, run the script [main](main.py) or [main_webapp](main_webapp.py)
 
 Follow the prompts to enter:
-- Total area (sq.ft.)
+- Length (m)
+- Width (m)
 - Number of bedrooms
 - Whether to apply denoiser (y or n)
 
@@ -109,5 +110,5 @@ Follow these steps to set up the project locally:
 4. Run the Script
    
          main.py
-         main_webapp.py
+         app.py
    
