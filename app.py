@@ -137,6 +137,11 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
+    /* Adding styling for the images to match the desired spaced appearance */
+    .stImage > img {
+        border-radius: 8px; /* Rounded corners */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -207,8 +212,8 @@ if st.session_state.get('generated'):
             img.save(img_buffer, format="PNG")
             
             with cols[col_index]:
-                # Display image at native resolution (256px wide) to prevent pixelation
-                st.image(img, caption=f"Plan {i+1} (256x256)", width=256)
+                # --- EDITED LINE: Use use_column_width=True to fill the column space and ensure spacing ---
+                st.image(img, caption=f"Plan {i+1} (256x256)", use_column_width=True)
                 
                 # Download button below the image
                 st.download_button(
