@@ -9,6 +9,8 @@ from PIL import Image
 import warnings
 import cv2 
 
+st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
+
 # --- CONFIGURATION ---
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
@@ -92,8 +94,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
     return dwelling_type, images
 
 
-# --- Streamlit UI Setup ---
-st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
+# --- Streamlit UI Setup --
 
 st.markdown("""
 <style>
