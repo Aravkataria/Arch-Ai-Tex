@@ -201,5 +201,3 @@ if st.session_state.get('generated'):
                 )
 
 st.divider()
-
-st.divider()
