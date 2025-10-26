@@ -18,6 +18,7 @@
    - [Viewing Results](#viewing-results)  
 6.  [Results & Visualizations](#results--visualizations)
 7.  [Installation Instructions](#installation-instructions)
+8.  [Deployment][#Deployment]
 ---
 
 ## Project Overview  
@@ -112,3 +113,5 @@ Follow these steps to set up the project locally:
          main.py
          app.py
    
+## Deployment
+deployment is done onine on [[deployment.txt](https://arch-ai-tex.streamlit.app/)]
