@@ -8,26 +8,20 @@ from PIL import Image
 import warnings
 import cv2
 
+# -----------------------
+# Streamlit Page Config
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
+# --- CONFIGURATION ---
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
+# ===== GENERATOR (DCGAN Style for 256x256) =====
 class DCGAN_Generator(nn.Module):
-    def __init__(self, latent_dim=100, channels=1):
-        super().__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
-        self.gen = nn.Sequential(
-            DCGAN_Generator.block(512, 256),
-            DCGAN_Generator.block(256, 128),
-            DCGAN_Generator.block(128, 64),
-            nn.ConvTranspose2d(64, channels, 4, 2, 1),
-            nn.Tanh()
-        )
-
+    # Move 'block' outside of __init__ and make it a static method
     @staticmethod
     def block(in_f, out_f):
         return nn.Sequential(
@@ -36,9 +30,23 @@ class DCGAN_Generator(nn.Module):
             nn.ReLU(True)
         )
 
+    def __init__(self, latent_dim=100, channels=1):
+        super().__init__()
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
+        
+        # Call the static block method
+        self.gen = nn.Sequential(
+            DCGAN_Generator.block(512, 256),
+            DCGAN_Generator.block(256, 128),
+            DCGAN_Generator.block(128, 64),
+            nn.ConvTranspose2d(64, channels, 4, 2, 1),
+            nn.Tanh()
+        )
+
     def forward(self, z):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
+
 
 @st.cache_resource
 def load_all_models():
@@ -46,6 +54,7 @@ def load_all_models():
     try:
         rf_model_loaded = joblib.load("random_forest_classifier_model.joblib")
     except Exception as e:
+        # It's better to use st.error or logging if you want to show it in the app
         print(f"ERROR: Could not load Random Forest model: {e}")
 
     generator = DCGAN_Generator().to(DEVICE)
@@ -59,11 +68,13 @@ def load_all_models():
 
 RF_MODEL, GAN_MODEL = load_all_models()
 
+
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Prediction Model Missing"
     features = np.array([[area, bedrooms]])
     return rf_model.predict(features)[0]
+
 
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
@@ -74,32 +85,34 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         with torch.no_grad():
             img_tensor = generator(z)
 
-        # Convert tensor to uint8 NumPy array
+        # Convert tensor (normalized -1 to 1) to uint8 NumPy array (0 to 255)
         img_np = img_tensor.squeeze().cpu().numpy()
-        img_np = ((img_np + 1) * 127.5).clip(0, 255).astype(np.uint8)
+        # Use clip() for safety and then cast to uint8
+        img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
 
-        # Handle channel formatting
-        if CHANNELS == 1:
-            img_np = np.uint8(img_np)  # shape (H,W)
-        else:
-            if img_np.ndim == 3 and img_np.shape[0] == 3:  # shape (C,H,W)
-                img_np = np.transpose(img_np, (1, 2, 0))
-            img_np = np.uint8(img_np)
+        # Handle channel formatting for OpenCV/PIL
+        if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
+            # Transpose C, H, W to H, W, C for color images if CHANNELS > 1
+            img_np = np.transpose(img_np, (1, 2, 0))
 
         # Apply denoising if selected
         if denoise:
             if CHANNELS == 1:
+                # Grayscale denoise
                 img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
             else:
+                # Color denoise
                 img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
 
         # Convert to PIL Image
         mode = 'L' if CHANNELS == 1 else 'RGB'
+        # The NumPy array is already uint8 (0-255), so direct conversion is safe
         img_pil = Image.fromarray(img_np, mode)
         images.append(img_pil)
             
     return dwelling_type, images
 
+# --- Streamlit UI Setup ---
 st.markdown("""
 <style>
     .stButton>button {
@@ -122,6 +135,7 @@ st.title("Arch-Ai-Tex")
 st.markdown("### AI Floor Plan Generator")
 st.markdown("### Floorplan Generation based on Area and Rooms")
 
+# Input columns
 col_len, col_wid = st.columns(2)
 with col_len:
     house_length = st.number_input("Enter House Length (m)", min_value=10.0, max_value=10000.0, value=50.0, step=1.0)
@@ -136,6 +150,7 @@ denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
 st.markdown("---")
 
+# Initialize session state
 if 'generated' not in st.session_state:
     st.session_state['generated'] = False
     st.session_state['images'] = []
@@ -159,6 +174,7 @@ if st.button("Generate Optimized Floor Plans", type="primary", use_container_wid
     else:
         st.error("Please enter valid length, width, and bedroom values.")
 
+# Display generated images
 if st.session_state.get('generated'):
     st.divider()
     st.header("Generated Floor Plans")
