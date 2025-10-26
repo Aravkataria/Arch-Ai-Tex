@@ -175,19 +175,22 @@ if st.button("Generate Optimized Floor Plans", type="primary", use_container_wid
         st.error("Please enter valid length, width, and bedroom values.")
 
 # Display generated images
+# Display generated images
 if st.session_state.get('generated'):
     st.divider()
     st.header("Generated Floor Plans")
-    cols = st.columns(len(st.session_state['images']))  # dynamic number of columns
+    cols = st.columns(len(st.session_state['images']))
     for i, img in enumerate(st.session_state['images']):
         if img is not None:
-            # Convert to valid PIL Image if somehow it isn't
             if not isinstance(img, Image.Image):
                 img = Image.fromarray(np.array(img).astype(np.uint8))
+            
             img_buffer = io.BytesIO()
             img.save(img_buffer, format="PNG")
+            
             with cols[i]:
-                st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
+                st.image(img, caption=f"Plan {i+1} (256x256)", width=256) 
+                
                 st.download_button(
                     label=f"Download Plan {i+1}",
                     data=img_buffer.getvalue(),
@@ -196,5 +199,7 @@ if st.session_state.get('generated'):
                     key=f"download_{i}",
                     use_container_width=True
                 )
+
+st.divider()
 
 st.divider()
