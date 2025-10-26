@@ -4,27 +4,20 @@ import torch
 import torch.nn as nn
 import joblib
 import numpy as np
-from torchvision.utils import save_image
-from datetime import datetime
+import io
 from PIL import Image
 import warnings
-import cv2
+import cv2 
 
-# Device setup
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# --- CONFIGURATION ---
+DEVICE = torch.device("cpu")
 LATENT_DIM = 100
+CHANNELS = 1
 IMG_SIZE = 256
-OUTPUT_DIR = "web_generated_images"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
-# Load Random Forest model
-rf_model = joblib.load("room_predictor.joblib")
 
-def predict_dwelling_type(area, bedrooms):
-    features = np.array([[area, bedrooms]])
-    return rf_model.predict(features)[0]
-
-# Stage 1 Generator (DCGAN)
+# ===== GENERATOR (DCGAN Style for 256x256) =====
 class DCGAN_Generator(nn.Module):
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
@@ -49,56 +42,126 @@ class DCGAN_Generator(nn.Module):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
-# Load Stage 1 Generator
-G1 = DCGAN_Generator().to(DEVICE)
-G1.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
-G1.eval()
 
-# Function to generate multiple floorplans with optional denoiser
-def generate_final_plans(area, bedrooms, count=3, denoise=False):
-    dwelling_type = predict_dwelling_type(area, bedrooms)
-    images_paths = []
+@st.cache_resource
+def load_all_models():
+    rf_model_loaded = None
+    try:
+        rf_model_loaded = joblib.load("random_forest_classifier_model.joblib")
+    except Exception as e:
+        print(f"ERROR: Could not load Random Forest model: {e}")
 
-    for i in range(count):
+    generator = DCGAN_Generator().to(DEVICE)
+    try:
+        generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
+    except Exception as e:
+        print(f"ERROR: Could not load GAN weights: {e}")
+    
+    generator.eval()
+    return rf_model_loaded, generator
+
+
+RF_MODEL, GAN_MODEL = load_all_models()
+
+
+def predict_dwelling_type(area, bedrooms, rf_model):
+    if rf_model is None:
+        return "Prediction Model Missing"
+    features = np.array([[area, bedrooms]])
+    return rf_model.predict(features)[0]
+
+
+def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
+    dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
+    images = []
+
+    for _ in range(count):
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
         with torch.no_grad():
-            img_tensor = G1(z)
-        
-        # Convert tensor to numpy image
-        img_np = img_tensor.squeeze().cpu().numpy()  # shape: (H, W)
-        img_np = ((img_np + 1) * 127.5).astype(np.uint8)  # convert from [-1,1] to [0,255]
+            img_tensor = generator(z)
 
-        # Apply OpenCV denoiser if selected
+        img_np = img_tensor.squeeze().cpu().numpy()
+        img_np = ((img_np + 1) * 127.5).astype(np.uint8)
+
         if denoise:
             img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
 
-        # Save image
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        file_path = os.path.join(OUTPUT_DIR, f"floorplan_{i+1}_{timestamp}.png")
-        cv2.imwrite(file_path, img_np)
-        images_paths.append(file_path)
-        
-    return dwelling_type, images_paths
+        img_pil = Image.fromarray(img_np, 'L')
+        images.append(img_pil)
+            
+    return dwelling_type, images
 
-warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
-# Streamlit UI
-st.title("AI Floorplan Generator")
-st.write("Generate AI-based floorplans based on total area and number of bedrooms.")
+# --- Streamlit UI Setup ---
+st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-area = st.number_input("Enter Total Area (sq.ft.)", min_value=0.0, step=10.0)
-bedrooms = st.number_input("Enter Number of Bedrooms", min_value=0, step=1)
-denoise_option = st.checkbox("Apply Denoiser (OpenCV)")
+st.markdown("""
+<style>
+    .stButton>button {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-size: 1.1em;
+        transition: all 0.2s;
+    }
+    .stButton>button:hover {
+        background-color: #45a049;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+""", unsafe_allow_html=True)
+st.title("Arch-Ai-Tex")
+st.markdown("### AI Floor Plan Generator")
+st.markdown("### Floorplan Generation based on Area and Rooms")
 
-if st.button("Generate Floorplans"):
-    if area > 0 and bedrooms > 0:
-        with st.spinner("Generating floorplans... Please wait."):
-            dwelling_type, img_paths = generate_final_plans(area, bedrooms, count=3, denoise=denoise_option)
-        st.success(f"Predicted Dwelling Type: {dwelling_type}")
-        st.subheader("Generated Floorplans:")
-        cols = st.columns(3)
-        for i, path in enumerate(img_paths):
-            img = Image.open(path)
-            cols[i].image(img, caption=f"Floorplan {i+1}", use_container_width=True)
+col_len, col_wid = st.columns(2)
+with col_len:
+    house_length = st.number_input("Enter House Length (m)", min_value=10.0, max_value=10000.0, value=50.0, step=1.0)
+with col_wid:
+    house_width = st.number_input("Enter House Width/Depth (m)", min_value=10.0, max_value=10000.0, value=30.0, step=1.0)
+
+area = house_length * house_width
+st.markdown(f"**Calculated Total Area:** **{area:.2f} m.sq.**")
+
+bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, max_value=8, value=3, step=1)
+denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+
+st.markdown("---")
+
+if st.button("Generate Optimized Floor Plans", type="primary", use_container_width=True):
+    if area > 0 and bedrooms >= 0:
+        with st.spinner('AI is generating 3 floor plans...'):
+            dwelling_type, floor_plan_images = generate_final_plans(
+                GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+            )
+            st.session_state['images'] = floor_plan_images
+            st.session_state['generated'] = True
+            st.session_state['dwelling_type'] = dwelling_type
+            st.session_state['area'] = area
+            st.session_state['bedrooms'] = bedrooms
+
+        st.toast("Floor Plans Generated!")
     else:
-        st.error("Please enter valid area and bedroom values.")
+        st.error("Please enter valid length, width, and bedroom values.")
+
+if st.session_state.get('generated'):
+    st.divider()
+    st.header("Generated Floor Plans")
+    cols = st.columns(3)
+    for i, img in enumerate(st.session_state['images']):
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format="PNG")
+        with cols[i]:
+            st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
+            st.download_button(
+                label=f"Download Plan {i+1}",
+                data=img_buffer.getvalue(),
+                file_name=f"plan_{i+1}_Area{int(st.session_state['area'])}sqft_Beds{st.session_state['bedrooms']}.png",
+                mime="image/png",
+                key=f"download_{i}",
+                use_container_width=True
+            )
+
+st.divider()
