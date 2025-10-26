@@ -74,19 +74,28 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         with torch.no_grad():
             img_tensor = generator(z)
 
+        # Convert tensor to uint8 NumPy array
         img_np = img_tensor.squeeze().cpu().numpy()
-        img_np = ((img_np + 1) * 127.5).astype(np.uint8)
+        img_np = ((img_np + 1) * 127.5).clip(0, 255).astype(np.uint8)
 
-        if CHANNELS != 1 and img_np.ndim == 3 and img_np.shape[0] == 3:
-            img_np = np.transpose(img_np, (1, 2, 0))
+        # Handle channel formatting
+        if CHANNELS == 1:
+            img_np = np.uint8(img_np)  # shape (H,W)
+        else:
+            if img_np.ndim == 3 and img_np.shape[0] == 3:  # shape (C,H,W)
+                img_np = np.transpose(img_np, (1, 2, 0))
+            img_np = np.uint8(img_np)
 
+        # Apply denoising if selected
         if denoise:
             if CHANNELS == 1:
                 img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
             else:
-                img_np = cv2.fastNlMeansDenoisingColor(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
+                img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
 
-        img_pil = Image.fromarray(img_np, 'L' if CHANNELS == 1 else 'RGB')
+        # Convert to PIL Image
+        mode = 'L' if CHANNELS == 1 else 'RGB'
+        img_pil = Image.fromarray(img_np, mode)
         images.append(img_pil)
             
     return dwelling_type, images
@@ -158,7 +167,7 @@ if st.session_state.get('generated'):
         img_buffer = io.BytesIO()
         img.save(img_buffer, format="PNG")
         with cols[i]:
-            st.image(np.array(img), caption=f"Plan {i+1} (256x256)", use_container_width=True)
+            st.image(img, caption=f"Plan {i+1} (256x256)", use_container_width=True)
             st.download_button(
                 label=f"Download Plan {i+1}",
                 data=img_buffer.getvalue(),
