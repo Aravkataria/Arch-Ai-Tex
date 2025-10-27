@@ -114,4 +114,4 @@ Follow these steps to set up the project locally:
          app.py
    
 ## Deployment
-deployment is done onine on [[deployment](https://arch-ai-tex.streamlit.app/)]
+deployment is done online on [[deployment](https://arch-ai-tex.streamlit.app/)]
