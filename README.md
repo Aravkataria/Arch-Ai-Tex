@@ -76,7 +76,7 @@ the [room_predictor](room_predictor.py) will save the room_predictor.joblib mode
 
 ### Generating Floor Plans
 
-To generate a new floor plan, run the script [main](main.py) or [main_webapp](main_webapp.py)
+To generate a new floor plan, run the script [main](main.py) or [main_webapp](app.py)
 
 Follow the prompts to enter:
 - Length (m)
