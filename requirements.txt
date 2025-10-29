@@ -14,3 +14,4 @@ torchaudio
 
 # Headless OpenCV
 opencv-python-headless
+transformers
