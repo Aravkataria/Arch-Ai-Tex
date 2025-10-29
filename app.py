@@ -33,19 +33,19 @@ def load_layout_pipeline():
         pipe = pipe.to("cuda" if torch.cuda.is_available() else "cpu")
         return pipe
     except Exception as e:
-        print("Layout model not loaded:", e)
         return None
 
 LAYOUT_PIPE = load_layout_pipeline()
 
 def generate_layout_image(area, bedrooms):
+    area_sq_feet = area * 10.764
     if LAYOUT_PIPE:
-        prompt = f"architectural layout of a {bedrooms}-bedroom house in {area} square feet area"
+        prompt = f"architectural layout of a {bedrooms}-bedroom house in {area_sq_feet:.0f} square feet area, clear lines, black and white floor plan"
         image = LAYOUT_PIPE(prompt=prompt, guidance_scale=7.5).images[0]
         return image
     else:
         img = np.ones((256, 256, 3), np.uint8) * 255
-        text = f"{bedrooms} BR | {area:.0f} m²"
+        text = f"{bedrooms} BR | {area:.0f} sq. m"
         cv2.putText(img, text, (40, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
         return Image.fromarray(img)
 
