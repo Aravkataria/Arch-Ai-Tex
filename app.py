@@ -7,30 +7,34 @@ import io
 from PIL import Image
 import warnings
 import cv2
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-from diffusers import StableDiffusionPipeline
+from typing import Tuple, List, Optional
+
+warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
-warnings.filterwarnings("ignore", message="missing ScriptRunContext")
+RF_MODEL_PATH = "random_forest_classifier_model.joblib"
+GAN_WEIGHTS_PATH = "generator_epoch100.pth"
 
 class DCGAN_Generator(nn.Module):
+    
     @staticmethod
-    def block(in_f, out_f):
+    def block(in_f: int, out_f: int) -> nn.Sequential:
         return nn.Sequential(
             nn.BatchNorm2d(in_f),
             nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
             nn.ReLU(True)
         )
 
-    def __init__(self, latent_dim=100, channels=1):
+    def __init__(self, latent_dim: int = LATENT_DIM, channels: int = CHANNELS):
         super().__init__()
-        # FIX: Explicitly setting the output size to 131072 features (512*16*16) to match the checkpoint
-        self.fc = nn.Linear(latent_dim, 131072)
+        
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
+        
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
@@ -39,109 +43,77 @@ class DCGAN_Generator(nn.Module):
             nn.Tanh()
         )
 
-    def forward(self, z):
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
 
 @st.cache_resource
-def load_all_models():
-    rf_model = None
-    generator = DCGAN_Generator(latent_dim=LATENT_DIM, channels=CHANNELS).to(DEVICE)
-
+def load_all_models() -> Tuple[Optional[object], DCGAN_Generator]:
+    rf_model_loaded = None
     try:
-        rf_model = joblib.load("room_predictor.joblib")
-        st.success("Random Forest model loaded successfully")
+        rf_model_loaded = joblib.load(RF_MODEL_PATH)
+        st.toast("Random Forest Model Loaded Successfully!")
     except Exception as e:
-        st.error(f"Error loading Random Forest model: {e}")
-        rf_model = None
+        st.error(f"ERROR: Could not load Random Forest model from '{RF_MODEL_PATH}'. Is the file missing? Details: {e}")
 
+    generator = DCGAN_Generator().to(DEVICE)
     try:
-        generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
-        st.success("Generator model loaded successfully")
+        generator.load_state_dict(torch.load(GAN_WEIGHTS_PATH, map_location=DEVICE))
+        st.toast("GAN Generator Weights Loaded Successfully!")
     except Exception as e:
-        st.error(f"Error loading Generator model: {e}")
-
+        st.error(f"ERROR: Could not load GAN weights from '{GAN_WEIGHTS_PATH}'. Is the file missing? Details: {e}")
+    
     generator.eval()
-    return rf_model, generator
-
-@st.cache_resource
-def load_text_model():
-    tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-base")
-    model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
-    return tokenizer, model
-
-@st.cache_resource
-def load_layout_pipeline():
-    try:
-        pipe = StableDiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-v1-5", torch_dtype=torch.float16, safety_checker=None)
-        pipe = pipe.to("cuda" if torch.cuda.is_available() else "cpu")
-        return pipe
-    except Exception as e:
-        return None
+    return rf_model_loaded, generator
 
 RF_MODEL, GAN_MODEL = load_all_models()
-TEXT_TOKENIZER, TEXT_MODEL = load_text_model()
-LAYOUT_PIPE = load_layout_pipeline()
 
-def predict_dwelling_type(area, bedrooms, rf_model):
+
+def predict_dwelling_type(area: float, bedrooms: int, rf_model: Optional[object]) -> str:
     if rf_model is None:
         return "Prediction Model Missing"
-    features = np.array([[area, bedrooms]])
     try:
-        prediction = rf_model.predict(features)[0]
-        mapping = {0: "Small Home", 1: "Townhouse", 2: "Apartment", 3: "Large Estate"}
-        return mapping.get(prediction, f"Type {prediction}")
-    except Exception:
-        return "Error predicting type"
+        features = np.array([[area, bedrooms]])
+        return str(rf_model.predict(features)[0])
+    except Exception as e:
+        return f"Prediction Error: {e}"
 
-def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
+
+def generate_final_plans(
+    generator: DCGAN_Generator, 
+    area: float, 
+    bedrooms: int, 
+    count: int = 3, 
+    denoise: bool = False, 
+    rf_model: Optional[object] = None
+) -> Tuple[str, List[Image.Image]]:
     dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
-    images = []
-    for _ in range(count):
+    images: List[Image.Image] = []
+
+    for i in range(count):
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
+        
         with torch.no_grad():
             img_tensor = generator(z)
-            
+
         img_np = img_tensor.squeeze().cpu().numpy()
         img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
-        
+
         if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
-            img_np = np.transpose(img_np, (1,2,0))
-            
+            img_np = np.transpose(img_np, (1, 2, 0))
+
         if denoise:
             if CHANNELS == 1:
-                img_np = cv2.fastNlMeansDenoising(img_np, None, 10, 7, 21)
+                img_np = cv2.fastNlMeansDenoising(img_np, None, h=10, templateWindowSize=7, searchWindowSize=21)
             else:
-                img_np = cv2.fastNlMeansDenoisingColored(img_np, None, 10,10,7,21)
-                
-        mode = 'L' if CHANNELS==1 else 'RGB'
+                img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
+
+        mode = 'L' if CHANNELS == 1 else 'RGB'
         img_pil = Image.fromarray(img_np, mode)
         images.append(img_pil)
+            
     return dwelling_type, images
-
-def generate_text_description(area, bedrooms):
-    prompt = f"Generate a short, friendly architectural description for a house with area {area:.2f} square meters and {bedrooms} bedrooms. Focus on fun features."
-    
-    if TEXT_MODEL is None or TEXT_TOKENIZER is None:
-        return "Text description model not loaded."
-        
-    inputs = TEXT_TOKENIZER(prompt, return_tensors="pt")
-    outputs = TEXT_MODEL.generate(**inputs, max_length=100)
-    return TEXT_TOKENIZER.decode(outputs[0], skip_special_tokens=True)
-
-def generate_layout_image(area, bedrooms):
-    if LAYOUT_PIPE is None:
-        img = np.ones((512, 512, 3), np.uint8) * 255
-        text = f"{bedrooms} BR | {area:.0f} sq. m"
-        cv2.putText(img, text, (40, 260), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 4)
-        return Image.fromarray(img)
-        
-    area_sq_feet = area * 10.764
-    
-    prompt = f"realistic, high-resolution architectural floor plan of a {bedrooms}-bedroom house in {area_sq_feet:.0f} square feet area, clear lines, black and white blueprint style"
-    image = LAYOUT_PIPE(prompt, guidance_scale=7.5).images[0]
-    return image
 
 st.markdown("""
 <style>
@@ -166,105 +138,120 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns([0.8, 0.2])
-with col1:
-    st.title("Arch-Ai-Tex")
-    st.markdown("### AI Floor Plan Generator")
-with col2:
-    st.markdown("<div style='text-align:right; padding-top:10px;'>", unsafe_allow_html=True)
-    st.image("QR.png", caption="Scan to explore", width=100)
-    st.markdown(
-        "<p style='font-size:14px; color:gray; text-align:right;'>"
-        "Scan the QR to view the full project or GitHub repository."
-        "</p>",
-        unsafe_allow_html=True
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+col_title, col_qr = st.columns([0.8, 0.2])
 
+with col_title:
+    st.title("Arch-Ai-Tex")
+    st.markdown("### AI Floor Plan Generator powered by DCGAN")
+
+with col_qr:
+    with st.container():
+        st.markdown("<div style='text-align:right; padding-top:10px;'>", unsafe_allow_html=True)
+        try:
+            st.image("QR.png", width=110)
+        except:
+            st.warning("QR code image ('QR.png') not found.")
+            
+        st.markdown(
+            "<p style='font-size:14px; color:gray; text-align:right; margin-top:-10px;'>"
+            "Scan for Project Info"
+            "</p>",
+            unsafe_allow_html=True
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+st.divider()
+
+st.subheader("1. Enter Project Parameters")
 col_len, col_wid = st.columns(2)
 with col_len:
-    house_length = st.number_input("Enter House Length (m)", min_value=10.0, max_value=10000.0, value=50.0, step=1.0)
+    house_length = st.number_input(
+        "Enter House Length (m)", 
+        min_value=10.0, max_value=10000.0, value=50.0, step=1.0, format="%.2f"
+    )
 with col_wid:
-    house_width = st.number_input("Enter House Width (m)", min_value=10.0, max_value=10000.0, value=30.0, step=1.0)
+    house_width = st.number_input(
+        "Enter House Width/Depth (m)", 
+        min_value=10.0, max_value=10000.0, value=30.0, step=1.0, format="%.2f"
+    )
 
 area = house_length * house_width
-st.markdown(f"**Calculated Total Area:** **{area:.2f} m²**")
+st.info(f"**Calculated Total Area:** **{area:.2f} m²**")
 
 bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, max_value=8, value=3, step=1)
-denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-
-model_choice = st.radio(
-    "Choose AI Mode:",
-    ["Custom GAN Model", "Pre-Trained Layout Generator"]
+denoise_option = st.checkbox(
+    "Apply Denoiser (OpenCV)", 
+    value=False, 
+    help="Uses a non-local means filter to smooth noise from the generated image. Can slightly blur details."
 )
 
-st.markdown("---")
+st.divider()
 
 if 'generated' not in st.session_state:
-    st.session_state['generated'] = False
-    st.session_state['images'] = []
-    st.session_state['dwelling_type'] = None
-    st.session_state['description'] = None
-    st.session_state['layout_img'] = None
+    st.session_state.update({
+        'generated': False,
+        'images': [],
+        'dwelling_type': None,
+        'area': area,
+        'bedrooms': bedrooms
+    })
 
-if st.button("Generate AI Output", use_container_width=True):
-    st.session_state['generated'] = False
-    st.session_state['images'] = []
-    st.session_state['dwelling_type'] = None
-    st.session_state['layout_img'] = None
-    st.session_state['description'] = None
-    
-    if model_choice == "Custom GAN Model":
-        with st.spinner("Generating floor plans... (This uses the Custom GAN Model)"):
+if st.button("Generate Optimized Floor Plans", type="primary", use_container_width=True):
+    if GAN_MODEL is None or not RF_MODEL:
+        st.error("Cannot generate. One or more required AI models failed to load. Check console for details.")
+    elif area > 0 and bedrooms >= 0:
+        with st.spinner('AI is generating 3 unique floor plans...'):
             dwelling_type, floor_plan_images = generate_final_plans(
                 GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
             )
-            st.session_state['images'] = floor_plan_images
-            st.session_state['dwelling_type'] = dwelling_type
-            
-            st.session_state['description'] = generate_text_description(area, bedrooms)
-            
-    else:
-        with st.spinner("Generating layout image... (This uses the Stable Diffusion Layout Model)"):
-            layout_image = generate_layout_image(area, bedrooms)
-            st.session_state['layout_img'] = layout_image
-            st.session_state['description'] = generate_text_description(area, bedrooms)
-            
-    st.session_state['generated'] = True
+            st.session_state.update({
+                'images': floor_plan_images,
+                'generated': True,
+                'dwelling_type': dwelling_type,
+                'area': area,
+                'bedrooms': bedrooms
+            })
 
-st.markdown("---")
+        st.toast("Floor Plans Generated Successfully!")
+    else:
+        st.error("Please enter valid length, width, and bedroom values (must be > 0).")
 
 if st.session_state.get('generated'):
-    if st.session_state.get('description'):
-        st.header("Architectural Insight")
-        st.info(st.session_state['description'])
-        st.markdown("---")
-        
-    if model_choice == "Custom GAN Model" and st.session_state['images']:
-        st.header("Generated Floor Plans")
-        if st.session_state['dwelling_type']:
-            st.subheader(f"Predicted Dwelling Style: {st.session_state['dwelling_type']}")
+    st.header("2. Your Generated Plans")
+    
+    if st.session_state['dwelling_type'] and st.session_state['dwelling_type'] != "Prediction Model Missing":
+        st.subheader(f"Type Prediction: **{st.session_state['dwelling_type']}**")
+    else:
+        st.warning("Could not predict dwelling type (RF Model missing or error).")
+    
+    cols = st.columns([1, 0.1, 1, 0.1, 1])
+    images = st.session_state['images']
+
+    for i, col_index in enumerate([0, 2, 4]):
+        if i < len(images):
+            img = images[i]
             
-        cols = st.columns([1,0.1,1,0.1,1])
-        images = st.session_state['images']
-        for i, col_index in enumerate([0,2,4]):
-            if i < len(images):
-                img = images[i]
-                img_buffer = io.BytesIO()
-                img.save(img_buffer, format="PNG")
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format="PNG")
+            
+            with cols[col_index]:
+                st.image(img, caption=f"Plan {i+1} (256x256)", use_column_width=True)
                 
-                with cols[col_index]:
-                    st.image(img, caption=f"Plan {i+1} (256×256)", use_column_width=True)
-                    st.download_button(
-                        label=f"Download Plan {i+1}",
-                        data=img_buffer.getvalue(),
-                        file_name=f"plan_{i+1}_Area{int(area)}_Beds{bedrooms}.png",
-                        mime="image/png",
-                        key=f"download_{i}"
-                    )
-    elif model_choice == "Pre-Trained Layout Generator" and st.session_state.get('layout_img') is not None:
-        st.header("Generated Layout")
-        st.image(st.session_state['layout_img'], use_column_width=True)
-        
-st.markdown("---")
-st.markdown("© 2025 Arch-Ai-Tex | AI-powered Architectural Design Tool")
+                st.download_button(
+                    label=f"Download Plan {i+1}",
+                    data=img_buffer.getvalue(),
+                    file_name=f"plan_{i+1}_Area{int(st.session_state['area'])}m2_Beds{st.session_state['bedrooms']}.png",
+                    mime="image/png",
+                    key=f"download_{i}",
+                    use_container_width=True
+                )
+
+st.divider()
+
+st.markdown(
+    "<div style='text-align: center; color: gray; font-size: 0.8em; padding-top: 10px;'>"
+    "**Disclaimer:** These plans are AI-generated and conceptual. They are not to scale "
+    "and should not be used for actual construction without professional architectural review."
+    "</div>", 
+    unsafe_allow_html=True
+)
