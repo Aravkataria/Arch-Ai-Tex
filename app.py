@@ -29,7 +29,8 @@ class DCGAN_Generator(nn.Module):
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)  # <- must be 131072
+        # FIX: Explicitly setting the output size to 131072 features (512*16*16) to match the checkpoint
+        self.fc = nn.Linear(latent_dim, 131072)
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
@@ -48,20 +49,18 @@ def load_all_models():
     rf_model = None
     generator = DCGAN_Generator(latent_dim=LATENT_DIM, channels=CHANNELS).to(DEVICE)
 
-    # Load Random Forest model
     try:
         rf_model = joblib.load("room_predictor.joblib")
-        st.success("✅ Random Forest model loaded successfully")
+        st.success("Random Forest model loaded successfully")
     except Exception as e:
-        st.error(f"❌ Error loading Random Forest model: {e}")
+        st.error(f"Error loading Random Forest model: {e}")
         rf_model = None
 
-    # Load GAN generator model
     try:
         generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
-        st.success("✅ Generator model loaded successfully")
+        st.success("Generator model loaded successfully")
     except Exception as e:
-        st.error(f"❌ Error loading Generator model: {e}")
+        st.error(f"Error loading Generator model: {e}")
 
     generator.eval()
     return rf_model, generator
@@ -103,7 +102,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
         with torch.no_grad():
             img_tensor = generator(z)
-        
+            
         img_np = img_tensor.squeeze().cpu().numpy()
         img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
         
