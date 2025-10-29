@@ -157,42 +157,43 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
         ax.set_title(title)
         return fig
 
-    # simple packing: row-wise placement, scale areas to approximate rectangles
     total_area = sum(r["area"] for r in rooms)
-    # scale factor to map area units -> plot area units (approximate)
-    # avoid division by zero
     scale = (plot_w * plot_h) / max(total_area, 1.0)
-
     pad = min(plot_w, plot_h) * 0.02
-    x = pad
-    y = pad
-    row_h = 0.0
-    colors = ["#cce5df", "#d1b3ff", "#b3e0ff", "#ffcccc", "#c2f0c2", "#fff0b3"]
+
+    x, y = pad, pad
+    row_h = 0
+    colors = ["#f4cccc", "#d9ead3", "#cfe2f3", "#fff2cc", "#d9d2e9", "#c2f0c2"]
 
     for i, r in enumerate(rooms):
-        desired_area = max(0.1, r["area"])  # avoid zero
+        desired_area = max(0.1, r["area"])
         rect_area = desired_area * scale
-        # choose rectangle shape: try to make width about 1.4 * height for variety
-        w = math.sqrt(rect_area) * 1.2
+        w = math.sqrt(rect_area) * 1.3
         h = rect_area / w
-        # clamp if too wide
+
+        # Move to next row if doesn't fit horizontally
         if x + w + pad > plot_w:
             x = pad
             y += row_h + pad
-            row_h = 0.0
+            row_h = 0
+
+        # Stop if we run out of vertical space
         if y + h + pad > plot_h:
-            # if doesn't fit vertically, scale down
-            scale_down = (plot_h - y - pad) / max(h, 1e-6)
-            w *= scale_down
-            h *= scale_down
-        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
+            break
+
+        rect = plt.Rectangle((x, y), w, h,
+                             facecolor=colors[i % len(colors)],
+                             edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²",
+                ha='center', va='center', fontsize=8)
+
         x += w + pad
         row_h = max(row_h, h)
 
     ax.set_title(title)
     return fig
+
 
 
 # styling
