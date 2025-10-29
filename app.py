@@ -166,7 +166,7 @@ with col1:
     st.markdown("### AI Floor Plan Generator")
 with col2:
     st.markdown("<div style='text-align:right; padding-top:10px;'>", unsafe_allow_html=True)
-    st.image("https://placehold.co/110x110/38a169/ffffff?text=QR+Code", width=110)
+    st.image("qr.png", caption="Scan to explore", width=100)
     st.markdown(
         "<p style='font-size:14px; color:gray; text-align:right;'>"
         "Scan the QR to view the full project or GitHub repository."
