@@ -49,7 +49,7 @@ def load_all_models():
 
     # Load Random Forest model
     try:
-        rf_model = joblib.load("random_forest_classifier_model.joblib")
+        rf_model = joblib.load("room_predictor.joblib")
         st.success("✅ Random Forest model loaded successfully")
     except Exception as e:
         st.error(f"❌ Error loading Random Forest model: {e}")
