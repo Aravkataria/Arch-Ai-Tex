@@ -16,6 +16,7 @@ torchaudio
 opencv-python-headless
 
 # Hugging Face Transformers + Required Libraries
+diffusers
 transformers==4.45.0
 sentencepiece
 protobuf
