@@ -53,8 +53,6 @@ def load_all_models():
     generator = DCGAN_Generator(latent_dim=LATENT_DIM, channels=CHANNELS).to(DEVICE)
     try:
         generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
-    except:
-        pass
 
     generator.eval()
     return rf_model, generator
