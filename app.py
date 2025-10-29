@@ -47,16 +47,19 @@ def load_all_models():
     rf_model = None
     try:
         rf_model = joblib.load("random_forest_classifier_model.joblib")
-    except:
-        pass
+    except Exception as e:
+        st.warning(f"Error loading RF model: {e}")
 
     generator = DCGAN_Generator(latent_dim=LATENT_DIM, channels=CHANNELS).to(DEVICE)
+
     try:
         generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
+        st.success(" Generator model loaded successfully")
+    except Exception as e:
+        st.error(f"Error loading generator: {e}")
 
     generator.eval()
     return rf_model, generator
-
 @st.cache_resource
 def load_text_model():
     tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-base")
