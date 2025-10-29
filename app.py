@@ -167,33 +167,25 @@ if mode == "GAN Generator":
                 )
 
 # ---------------------- OPTIMIZED LAYOUT MODE ----------------------
-else:
-    st.subheader("AI Optimized Layout (Pretrained Model)")
-    total_area = st.number_input("Enter Total Area (m²)", min_value=50.0, max_value=1000.0, value=100.0)
-    num_rooms = st.number_input("Enter Number of Rooms", min_value=3, max_value=10, value=5)
-    
-    if st.button("Generate Optimized Layout", use_container_width=True):
-        rooms = [
-            {"name": "living+dining", "area": 33.6},
-            {"name": "bedroom_1", "area": 25.9},
-            {"name": "bedroom_2", "area": 25.9},
-            {"name": "kitchen", "area": 20.8},
-            {"name": "bathroom", "area": 13.8},
-        ]
-        df = pd.DataFrame(rooms)
-        st.dataframe(df)
 
-        fig, ax = plt.subplots(figsize=(6, 6))
-        colors = ['#cce5df', '#d1b3ff', '#b3e0ff', '#ffcccc', '#c2f0c2']
-        x, y = 0.1, 0.1
-        for i, r in enumerate(rooms):
-            w = h = np.sqrt(r["area"])
-            rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.5)
-            ax.add_patch(rect)
-            ax.text(x + w/2, y + h/2, f"{r['name']}\n{r['area']} sqm", ha='center', va='center', fontsize=9)
-            y += h + 0.2
-        ax.set_xlim(0, 20)
-        ax.set_ylim(0, 20)
-        ax.set_aspect('equal')
-        ax.set_title("Adjacency-aware Optimized Layout", fontsize=12)
-        st.pyplot(fig)
+else:
+    colA, colB = st.columns(2)
+    with colA:
+        total_area = st.number_input("Enter Total Area (sqm)", 30.0, 5000.0, 120.0)
+    with colB:
+        num_rooms = st.number_input("Enter Number of Bedrooms", 0, 10, 2)
+
+    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
+    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+    colW, colH = st.columns(2)
+    with colW:
+        plot_w = st.number_input("Plot Width (m)", 5.0, 100.0, 10.0)
+    with colH:
+        plot_h = st.number_input("Plot Height (m)", 5.0, 100.0, 10.0)
+
+    if st.button("Generate Optimized Layout"):
+        with st.spinner("Generating layout..."):
+            layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
+            st.json(layout)
+            fig = plot_layout(layout, plot_w, plot_h, "Optimized Layout")
+            st.pyplot(fig)
