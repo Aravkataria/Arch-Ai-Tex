@@ -114,9 +114,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Arch-Ai-Tex")
-st.markdown("### AI Floor Plan Generator")
-st.markdown("Generate floor plans optimized for your required area and number of rooms.")
+col1, col2 = st.columns([0.8, 0.2])  # Adjust ratios as needed
+
+with col1:
+    st.title("Arch-Ai-Tex")
+    st.markdown("### AI Floor Plan Generator")
+
+with col2:
+    st.markdown("<div style='text-align:right; padding-top:10px;'>", unsafe_allow_html=True)
+    st.image("QR.png", width=110) 
+    st.markdown(
+        "<p style='font-size:14px; color:gray; text-align:right;'>"
+        "Scan the QR to view the full project or GitHub repository."
+        "</p>",
+        unsafe_allow_html=True
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 col_len, col_wid = st.columns(2)
 with col_len:
