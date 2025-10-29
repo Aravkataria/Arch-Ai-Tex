@@ -16,6 +16,27 @@ LATENT_DIM = 100
 IMG_SIZE = 256
 PIXEL_TO_AREA = 0.25  # 1 pixel = 0.25 sq units (you can adjust this)
 
+@st.cache_resource
+def load_all_models():
+    rf_model_loaded = None
+    generator = DCGAN_Generator().to(DEVICE)
+
+    # Load the Random Forest model first
+    try:
+        rf_model_loaded = joblib.load("room_predictor.joblib")
+        print("✅ Room predictor loaded successfully.")
+    except Exception as e:
+        print(f"⚠️ Room predictor not found or failed to load: {e}")
+
+    # Load the GAN Generator weights
+    try:
+        generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
+        print("✅ Generator weights loaded successfully.")
+    except Exception as e:
+        print(f"⚠️ Generator weights not found or failed to load: {e}")
+
+    generator.eval()
+    return rf_model_loaded, generator
 
 # ------------------------------------------------------------
 # Generator architecture (example DCGAN-style)
@@ -52,24 +73,6 @@ def tensor_to_pil(tensor):
     tensor = tensor.squeeze(0).permute(1, 2, 0).clamp(0, 1)
     array = (tensor.numpy() * 255).astype(np.uint8)
     return Image.fromarray(array)
-
-
-# ------------------------------------------------------------
-# Load models
-# ------------------------------------------------------------
-@st.cache_resource
-def load_models():
-    gen = Generator(LATENT_DIM).to(DEVICE)
-    try:
-        gen.load_state_dict(torch.load("generator.pth", map_location=DEVICE))
-    except:
-        st.warning("Generator weights not found, using untrained model.")
-    try:
-        clf = joblib.load("room_predictor.pkl")
-    except:
-        clf = None
-        st.warning("Room predictor not found, skipping prediction.")
-    return gen, clf
 
 
 # ------------------------------------------------------------
