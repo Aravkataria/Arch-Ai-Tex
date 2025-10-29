@@ -29,7 +29,7 @@ class DCGAN_Generator(nn.Module):
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 4 * 4)
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
@@ -39,9 +39,8 @@ class DCGAN_Generator(nn.Module):
         )
 
     def forward(self, z):
-        out = self.fc(z).view(z.size(0), 512, 4, 4)
+        out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
-
 @st.cache_resource
 def load_all_models():
     rf_model = None
