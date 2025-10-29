@@ -9,6 +9,9 @@ import pandas as pd
 from PIL import Image
 import cv2
 import warnings
+import json
+import math
+import random
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -20,7 +23,7 @@ CHANNELS = 1
 IMG_SIZE = 256
 
 
-# ---------------------- GAN MODEL ----------------------
+# GAN model
 class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
@@ -70,8 +73,11 @@ RF_MODEL, GAN_MODEL = load_all_models()
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Prediction Model Missing"
-    features = np.array([[area, bedrooms]])
-    return rf_model.predict(features)[0]
+    try:
+        features = np.array([[float(area), int(bedrooms)]])
+        return rf_model.predict(features)[0]
+    except Exception:
+        return "Prediction Failed"
 
 
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
@@ -99,144 +105,199 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
     return dwelling_type, images
 
-# ---------------------- LAYOUT GENERATOR HELPERS ----------------------
-def generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h):
+
+# corrected semantic layout generator — ensures requested number of bedrooms are created
+def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h):
+    """
+    Returns: (layout_dict, raw_text)
+    layout_dict = {"rooms": [{"name":..., "area": ...}, ...]}
+    """
+    # ensure numeric
+    total_area = float(total_area)
+    num_bedrooms = max(0, int(num_bedrooms))
+
+    # fixed ratios for core rooms (these occupy a portion of total_area)
+    fixed_ratios = {"living+dining": 0.28, "kitchen": 0.08, "bathroom": 0.06}
+    fixed_total = sum(fixed_ratios.values())
+    remaining_ratio = max(0.0, 1.0 - fixed_total)
+
     rooms = []
-    base_names = ["living+dining", "bedroom_1", "bedroom_2", "kitchen", "bathroom", "utility"]
-    ratios = [0.3, 0.2, 0.2, 0.15, 0.1, 0.05]
+    # add fixed rooms
+    for name, ratio in fixed_ratios.items():
+        rooms.append({"name": name, "area": round(total_area * ratio, 2)})
 
-    for i in range(num_rooms):
-        name = base_names[i % len(base_names)]
-        area = round(total_area * ratios[i % len(ratios)], 1)
-        rooms.append({"name": name, "area": area})
-    return {"rooms": rooms}, None
+    # allocate remaining area to bedrooms (if any) otherwise utility
+    if num_bedrooms > 0:
+        per_bed_ratio = remaining_ratio / num_bedrooms
+        for i in range(num_bedrooms):
+            rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
+    else:
+        rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
+
+    # fix rounding drift
+    current_sum = round(sum(r["area"] for r in rooms), 2)
+    diff = round(total_area - current_sum, 2)
+    if abs(diff) >= 0.01:
+        rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
+
+    return {"rooms": rooms}, ""
 
 
-def plot_layout(layout, width, height, title):
+# plotting that scales rectangles to plot_w x plot_h reasonably
+def plot_layout(layout, plot_w, plot_h, title="Layout"):
     fig, ax = plt.subplots(figsize=(6, 6))
-    x, y = 0, 0
+    ax.set_xlim(0, plot_w)
+    ax.set_ylim(0, plot_h)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.2))
+
+    rooms = layout.get("rooms", [])
+    if not rooms:
+        ax.set_title(title)
+        return fig
+
+    # simple packing: row-wise placement, scale areas to approximate rectangles
+    total_area = sum(r["area"] for r in rooms)
+    # scale factor to map area units -> plot area units (approximate)
+    # avoid division by zero
+    scale = (plot_w * plot_h) / max(total_area, 1.0)
+
+    pad = min(plot_w, plot_h) * 0.02
+    x = pad
+    y = pad
+    row_h = 0.0
     colors = ["#cce5df", "#d1b3ff", "#b3e0ff", "#ffcccc", "#c2f0c2", "#fff0b3"]
 
-    for i, r in enumerate(layout["rooms"]):
-        w = np.sqrt(r["area"])
-        h = w
-        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)],
-                             edgecolor="black", linewidth=1.5)
+    for i, r in enumerate(rooms):
+        desired_area = max(0.1, r["area"])  # avoid zero
+        rect_area = desired_area * scale
+        # choose rectangle shape: try to make width about 1.4 * height for variety
+        w = math.sqrt(rect_area) * 1.2
+        h = rect_area / w
+        # clamp if too wide
+        if x + w + pad > plot_w:
+            x = pad
+            y += row_h + pad
+            row_h = 0.0
+        if y + h + pad > plot_h:
+            # if doesn't fit vertically, scale down
+            scale_down = (plot_h - y - pad) / max(h, 1e-6)
+            w *= scale_down
+            h *= scale_down
+        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w/2, y + h/2, f"{r['name']}\n{r['area']} sqm",
-                ha="center", va="center", fontsize=9)
-        y += h + 0.2
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
+        x += w + pad
+        row_h = max(row_h, h)
 
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_title(title + f" — {width:.1f}m × {height:.1f}m")
-    ax.set_aspect("equal")
-    plt.tight_layout()
+    ax.set_title(title)
     return fig
-    
-# ---------------------- STYLING ----------------------
-st.markdown("""
+
+
+# styling
+st.markdown(
+    """
 <style>
 .stButton>button {
     background-color: #4CAF50;
     color: white;
     border-radius: 8px;
     padding: 10px 24px;
-    font-size: 1.1em;
-    transition: all 0.2s;
+    font-size: 1.05em;
+    transition: all 0.15s;
     border: none;
 }
 .stButton>button:hover {
     background-color: #45a049;
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 .stImage > img {
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-
-# ---------------------- HEADER ----------------------
+# header
 col1, col2 = st.columns([0.8, 0.2])
 with col1:
     st.title("Arch-Ai-Tex")
-    st.markdown("### AI Floor Plan Generator")
+    st.markdown("AI Floor Plan Generator")
 with col2:
-    st.markdown("<div style='text-align:right;'>", unsafe_allow_html=True)
     st.image("QR.png", width=110)
-    st.markdown(
-        "<p style='font-size:14px; color:gray; text-align:right;'>Scan the QR to view the full project or GitHub repository.</p>",
-        unsafe_allow_html=True
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
-
-# ---------------------- MODEL SELECTION ----------------------
-mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 st.markdown("---")
 
+mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 
-# ---------------------- GAN MODEL MODE ----------------------
 if mode == "GAN Generator":
     col_len, col_wid = st.columns(2)
     with col_len:
-        house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0)
+        house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
     with col_wid:
-        house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0)
+        house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
 
     area = house_length * house_width
     st.markdown(f"**Calculated Total Area:** {area:.2f} m²")
 
-    bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3)
+    bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         dwelling_type, floor_plan_images = generate_final_plans(
             GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
-        st.markdown("### Generated Floorplans:")
 
+        st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
+        st.markdown("Generated Floorplans:")
         cols = st.columns(3)
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
-                col.image(img, caption=f"Floorplan {i+1}")
+                col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
                     file_name=f"plan_{i+1}_Area{int(area)}sqm_Beds{bedrooms}.png",
-                    mime="image/png"
+                    mime="image/png",
                 )
 
-
-# ---------------------- OPTIMIZED LAYOUT MODE ----------------------
 else:
+    # Optimized Layout inputs
     colA, colB = st.columns(2)
     with colA:
-        total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
+        total_area = st.number_input("Enter Total Area (sqm)", min_value=10.0, value=120.0, step=1.0)
     with colB:
-        num_rooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=2)
+        num_bedrooms = st.number_input("Enter Number of Bedrooms", min_value=0, value=2, step=1)
 
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
 
     colW, colH = st.columns(2)
     with colW:
-        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+        plot_w = st.number_input("Plot Width (m)", min_value=3.0, value=10.0, step=0.5)
     with colH:
-        plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
+        plot_h = st.number_input("Plot Height (m)", min_value=3.0, value=10.0, step=0.5)
 
-    if st.button("Generate Optimized Layout"):
-        with st.spinner("Generating layout..."):
-            layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
-            dwelling_type = predict_dwelling_type(total_area, num_rooms, RF_MODEL)
-            st.success(f"🏠 Predicted Dwelling Type: **{dwelling_type}**")
-            st.json(layout)
+    if st.button("Generate Optimized Layout", use_container_width=True):
+        layout, _ = generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h)
+        dwelling_type = predict_dwelling_type(total_area, num_bedrooms, RF_MODEL)
+        st.success(f"Predicted Dwelling Type: {dwelling_type}")
 
-            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
-            st.pyplot(fig)
+        # show JSON and dataframe
+        st.subheader("Semantic layout (model)")
+        st.json(layout)
+        st.subheader("Rooms (table)")
+        df = pd.DataFrame(layout["rooms"])
+        st.dataframe(df, use_container_width=True)
+
+        # plot
+        fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
+        st.pyplot(fig)
