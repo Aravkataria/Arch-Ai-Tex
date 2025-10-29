@@ -7,11 +7,15 @@ joblib==1.4.2
 matplotlib==3.9.2
 scikit-learn==1.5.2
 
-# Torch CPU-only
+# Torch (CPU-only)
 torch
 torchvision
 torchaudio
 
-# Headless OpenCV
+# OpenCV (headless for servers)
 opencv-python-headless
-transformers
+
+# Hugging Face Transformers + Required Libraries
+transformers==4.45.0
+sentencepiece
+protobuf
