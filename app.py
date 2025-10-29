@@ -50,7 +50,7 @@ class DCGAN_Generator(nn.Module):
 def load_all_models():
     rf_model_loaded = None
     try:
-        rf_model_loaded = joblib.load("random_forest_classifier_model.joblib")
+        rf_model_loaded = joblib.load("room_predictor.joblib")
     except Exception as e:
         print(f"RF model missing: {e}")
 
