@@ -27,7 +27,6 @@ class DCGAN_Generator(nn.Module):
             nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
             nn.ReLU(True)
         )
-
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
         self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
@@ -38,7 +37,6 @@ class DCGAN_Generator(nn.Module):
             nn.ConvTranspose2d(64, channels, 4, 2, 1),
             nn.Tanh()
         )
-
     def forward(self, z):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
@@ -52,7 +50,8 @@ def load_models():
     except Exception:
         pass
     try:
-        generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
+        state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
+        generator.load_state_dict(state_dict)
     except Exception:
         pass
     generator.eval()
@@ -219,8 +218,7 @@ else:
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3,
-                                    help="This count includes kitchen and bathroom.")
+        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
     st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
