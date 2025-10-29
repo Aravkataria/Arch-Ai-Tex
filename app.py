@@ -17,7 +17,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
-RF_MODEL_PATH = "random_forest_classifier_model.joblib"
+RF_MODEL_PATH = "room_predictor.joblib"
 GAN_WEIGHTS_PATH = "generator_epoch100.pth"
 
 class DCGAN_Generator(nn.Module):
