@@ -145,9 +145,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Arch-Ai-Tex")
-st.markdown("### AI Floor Plan Generator")
-st.markdown("Generate floor plans optimized for your required area and number of rooms.")
+col1, col2 = st.columns([0.8, 0.2])  # Adjust proportions if needed
+
+with col1:
+    st.title("Arch-Ai-Tex")
+    st.markdown("### AI Floor Plan Generator")
+
+with col2:
+    st.image("qr.png", caption="Scan to explore", width=100)
 
 # Input columns
 col_len, col_wid = st.columns(2)
