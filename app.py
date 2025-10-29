@@ -187,16 +187,23 @@ if mode == "GAN Generator":
         house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
     with col_wid:
         house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
-    area = house_length * house_width
-    if area < 100:
-        area = 100
-    st.markdown(f"**Calculated Total Area:** {area:.2f} m²")
+
+    area_m2 = house_length * house_width
+    if area_m2 < 100:
+        area_m2 = 100
+    area_sqft = area_m2 * 10.7639  # Convert to square feet
+
+    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m²  (≈ {area_sqft:.0f} sq ft)**")
+
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
+        # Use square feet for prediction
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
-            GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+            GAN_MODEL, area_sqft, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
+
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
@@ -210,9 +217,10 @@ if mode == "GAN Generator":
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
-                    file_name=f"plan_{i+1}_Area{int(area)}sqm_Beds{bedrooms}.png",
+                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
                 )
+
 else:
     colA, colB = st.columns(2)
     with colA:
