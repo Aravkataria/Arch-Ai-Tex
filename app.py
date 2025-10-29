@@ -153,7 +153,7 @@ with col1:
 
 with col2:
     st.markdown("<div style='text-align:right; padding-top:10px;'>", unsafe_allow_html=True)
-    st.image("QR.jpeg", width=110)  # or "qr.jpg" if that's the file name
+    st.image("QR.png", width=110)  # or "qr.jpg" if that's the file name
     st.markdown(
         "<p style='font-size:14px; color:gray; text-align:right;'>"
         "Scan the QR to view the full project or GitHub repository."
