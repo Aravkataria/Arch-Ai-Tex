@@ -9,7 +9,7 @@ import warnings
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import random, json, re, math, copy, time
+import random, json, re, math
 from transformers import pipeline
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
@@ -97,8 +97,10 @@ def extract_json_from_model_output(output_text):
     try:
         return json.loads(output_text)
     except:
+        import re
         m = re.search(r"\{[\s\S]*\}", output_text)
-        if not m: raise ValueError("No JSON block")
+        if not m:
+            raise ValueError("No JSON block")
         js = m.group(0).replace("“", "\"").replace("”", "\"")
         return json.loads(js)
 
@@ -169,12 +171,19 @@ if mode == "GAN Generator":
                 st.download_button(f"Download Plan {i+1}", buf.getvalue(), f"plan_{i+1}.png", "image/png")
 
 else:
-    total_area = st.slider("Total area (sqm)", 30, 500, 120, 10)
-    num_rooms = st.slider("Number of bedrooms", 0, 6, 2)
-    property_type = st.selectbox("Property type", ["Apartment", "Villa", "Bungalow"])
-    plot_shape = st.selectbox("Plot shape", ["Square", "Rectangular"])
-    plot_w = st.number_input("Plot width (m)", 5.0, 50.0, 10.0)
-    plot_h = st.number_input("Plot height (m)", 5.0, 50.0, 10.0)
+    colA, colB = st.columns(2)
+    with colA:
+        total_area = st.number_input("Enter Total Area (sqm)", 30.0, 5000.0, 120.0)
+    with colB:
+        num_rooms = st.number_input("Enter Number of Bedrooms", 0, 10, 2)
+
+    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
+    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+    colW, colH = st.columns(2)
+    with colW:
+        plot_w = st.number_input("Plot Width (m)", 5.0, 100.0, 10.0)
+    with colH:
+        plot_h = st.number_input("Plot Height (m)", 5.0, 100.0, 10.0)
 
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
