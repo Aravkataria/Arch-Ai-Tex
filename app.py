@@ -197,8 +197,6 @@ if mode == "GAN Generator":
         dwelling_type, floor_plan_images = generate_final_plans(
             GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
-
-        st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown("### Generated Floorplans:")
 
         cols = st.columns(3)
