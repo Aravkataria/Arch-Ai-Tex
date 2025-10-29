@@ -12,6 +12,7 @@ import warnings
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
+# ---------------------- PAGE CONFIG ----------------------
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
 DEVICE = torch.device("cpu")
@@ -57,7 +58,7 @@ def load_all_models():
         generator.load_state_dict(torch.load("generator_epoch100.pth", map_location=DEVICE))
     except Exception as e:
         print(f"GAN weights missing: {e}")
-    
+
     generator.eval()
     return rf_model_loaded, generator
 
@@ -91,6 +92,55 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         mode = 'L' if CHANNELS == 1 else 'RGB'
         images.append(Image.fromarray(img_np, mode))
     return dwelling_type, images
+
+
+# ---------------------- OPTIMIZED LAYOUT GENERATOR ----------------------
+def generate_semantic_layout(area, rooms, property_type, shape, width, height):
+    layout = {
+        "Area (sqm)": area,
+        "Bedrooms": rooms,
+        "Property Type": property_type,
+        "Plot Shape": shape,
+        "Dimensions": {"Width": width, "Height": height}
+    }
+
+    # Randomized room rectangles for visualization
+    np.random.seed(42)
+    room_positions = []
+    for i in range(rooms):
+        rw, rh = np.random.uniform(0.2, 0.4) * width, np.random.uniform(0.2, 0.4) * height
+        rx, ry = np.random.uniform(0, width - rw), np.random.uniform(0, height - rh)
+        room_positions.append((rx, ry, rw, rh))
+    return layout, room_positions
+
+
+def plot_layout(layout, width, height, title):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
+    ax.set_title(title)
+    ax.set_xlabel("Width (m)")
+    ax.set_ylabel("Height (m)")
+    ax.grid(True, alpha=0.3)
+
+    # Draw plot boundary
+    rect = plt.Rectangle((0, 0), width, height, fill=None, edgecolor='black', lw=2)
+    ax.add_patch(rect)
+
+    # Draw rooms
+    layout_data, rooms = generate_semantic_layout(
+        layout["Area (sqm)"], layout["Bedrooms"],
+        layout["Property Type"], layout["Plot Shape"],
+        width, height
+    )
+    colors = plt.cm.Pastel1(np.linspace(0, 1, len(rooms)))
+    for i, (rx, ry, rw, rh) in enumerate(rooms):
+        ax.add_patch(plt.Rectangle((rx, ry), rw, rh, color=colors[i], alpha=0.7))
+        ax.text(rx + rw / 2, ry + rh / 2, f"Room {i+1}",
+                ha='center', va='center', fontsize=10, weight='bold')
+
+    return fig
+
 
 # ---------------------- STYLING ----------------------
 st.markdown("""
@@ -167,13 +217,12 @@ if mode == "GAN Generator":
                 )
 
 # ---------------------- OPTIMIZED LAYOUT MODE ----------------------
-
 else:
     colA, colB = st.columns(2)
     with colA:
-        total_area = st.number_input("Enter Total Area (sqm)", 30.0, 5000.0, 120.0)
+        total_area = st.number_input("Enter Total Area (sqm)", 30.0, 10000.0, 120.0)
     with colB:
-        num_rooms = st.number_input("Enter Number of Bedrooms", 0, 10, 2)
+        num_rooms = st.number_input("Enter Number of Bedrooms", 1, 10, 2)
 
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
@@ -183,7 +232,7 @@ else:
     with colH:
         plot_h = st.number_input("Plot Height (m)", 5.0, 100.0, 10.0)
 
-    if st.button("Generate Optimized Layout"):
+    if st.button("Generate Optimized Layout", type="primary", use_container_width=True):
         with st.spinner("Generating layout..."):
             layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
             st.json(layout)
