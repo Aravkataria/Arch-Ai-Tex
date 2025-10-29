@@ -16,7 +16,7 @@ col1, col2 = st.columns([3, 1])
 with col1:
     st.title("Arch-Ai-Tex")
 with col2:
-    st.image("QR.jpeg", width=110)
+    st.image("QR.png", width=110)
     st.caption("Scan the QR to view the full project or GitHub repository")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
