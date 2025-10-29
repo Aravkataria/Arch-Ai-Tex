@@ -8,6 +8,7 @@ from PIL import Image
 import warnings
 import cv2
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from diffusers import StableDiffusionPipeline  # layout generation
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
@@ -59,13 +60,21 @@ def load_all_models():
     return rf_model, generator
 
 @st.cache_resource
-def load_flan_t5():
+def load_text_model():
     tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-base")
     model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
     return tokenizer, model
 
+@st.cache_resource
+def load_layout_pipeline():
+    # this uses a text-to-image diffusion model to generate layout-style floor plans
+    pipe = StableDiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-v1-5", torch_dtype=torch.float16)
+    pipe = pipe.to("cuda" if torch.cuda.is_available() else "cpu")
+    return pipe
+
 RF_MODEL, GAN_MODEL = load_all_models()
-FLAN_TOKENIZER, FLAN_MODEL = load_flan_t5()
+TEXT_TOKENIZER, TEXT_MODEL = load_text_model()
+LAYOUT_PIPE = load_layout_pipeline()
 
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
@@ -83,23 +92,29 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         img_np = img_tensor.squeeze().cpu().numpy()
         img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
         if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
-            img_np = np.transpose(img_np, (1, 2, 0))
+            img_np = np.transpose(img_np, (1,2,0))
         if denoise:
             if CHANNELS == 1:
                 img_np = cv2.fastNlMeansDenoising(img_np, None, 10, 7, 21)
             else:
-                img_np = cv2.fastNlMeansDenoisingColored(img_np, None, 10, 10, 7, 21)
-        mode = 'L' if CHANNELS == 1 else 'RGB'
+                img_np = cv2.fastNlMeansDenoisingColored(img_np, None, 10,10,7,21)
+        mode = 'L' if CHANNELS==1 else 'RGB'
         img_pil = Image.fromarray(img_np, mode)
         images.append(img_pil)
     return dwelling_type, images
 
-def generate_text_with_flan(area, bedrooms):
+def generate_text_description(area, bedrooms):
     prompt = f"Generate a detailed architectural description for a house with area {area:.2f} square meters and {bedrooms} bedrooms."
-    inputs = FLAN_TOKENIZER(prompt, return_tensors="pt")
-    outputs = FLAN_MODEL.generate(**inputs, max_length=150)
-    return FLAN_TOKENIZER.decode(outputs[0], skip_special_tokens=True)
+    inputs = TEXT_TOKENIZER(prompt, return_tensors="pt")
+    outputs = TEXT_MODEL.generate(**inputs, max_length=150)
+    return TEXT_TOKENIZER.decode(outputs[0], skip_special_tokens=True)
 
+def generate_layout_image(area, bedrooms):
+    prompt = f"floor plan with {bedrooms} bedrooms and total area {area:.2f} square meters"
+    image = LAYOUT_PIPE(prompt).images[0]
+    return image
+
+# UI
 st.markdown("""
 <style>
     .stButton>button {
@@ -150,7 +165,10 @@ st.markdown(f"**Calculated Total Area:** **{area:.2f} m²**")
 bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, max_value=8, value=3, step=1)
 denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
-model_choice = st.radio("Choose AI Mode:", ["Arch-Ai-Tex Custom Model", "Pre-Trained Flan-T5 Model"])
+model_choice = st.radio(
+    "Choose AI Mode:",
+    ["Custom GAN Model", "Pre-Trained Layout Generator"]
+)
 
 st.markdown("---")
 
@@ -159,46 +177,47 @@ if 'generated' not in st.session_state:
     st.session_state['images'] = []
     st.session_state['dwelling_type'] = None
     st.session_state['description'] = None
+    st.session_state['layout_img'] = None
 
 if st.button("Generate AI Output", use_container_width=True):
-    if model_choice == "Arch-Ai-Tex Custom Model":
+    if model_choice == "Custom GAN Model":
         with st.spinner("Generating floor plans..."):
             dwelling_type, floor_plan_images = generate_final_plans(
                 GAN_MODEL, area, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
             )
             st.session_state['images'] = floor_plan_images
             st.session_state['dwelling_type'] = dwelling_type
-            st.session_state['generated'] = True
+            st.session_state['layout_img'] = None
     else:
-        with st.spinner("Generating architectural text..."):
-            text_output = generate_text_with_flan(area, bedrooms)
-            st.session_state['description'] = text_output
-            st.session_state['generated'] = True
+        with st.spinner("Generating layout image..."):
+            layout_image = generate_layout_image(area, bedrooms)
+            st.session_state['layout_img'] = layout_image
+            st.session_state['images'] = []
+    st.session_state['generated'] = True
 
 st.markdown("---")
 
 if st.session_state.get('generated'):
-    if model_choice == "Arch-Ai-Tex Custom Model" and st.session_state['images']:
+    if model_choice == "Custom GAN Model" and st.session_state['images']:
         st.header("Generated Floor Plans")
-        if st.session_state['dwelling_type'] != "Prediction Model Missing":
+        if st.session_state['dwelling_type']:
             st.subheader(f"Predicted Dwelling Type: {st.session_state['dwelling_type']}")
-        cols = st.columns([1, 0.1, 1, 0.1, 1])
+        cols = st.columns([1,0.1,1,0.1,1])
         images = st.session_state['images']
-        for i, col_index in enumerate([0, 2, 4]):
+        for i, col_index in enumerate([0,2,4]):
             if i < len(images):
                 img = images[i]
                 img_buffer = io.BytesIO()
                 img.save(img_buffer, format="PNG")
                 with cols[col_index]:
-                    st.image(img, caption=f"Plan {i+1} (256x256)", use_column_width=True)
+                    st.image(img, caption=f"Plan {i+1} (256×256)", use_column_width=True)
                     st.download_button(
                         label=f"Download Plan {i+1}",
                         data=img_buffer.getvalue(),
                         file_name=f"plan_{i+1}_Area{int(area)}_Beds{bedrooms}.png",
                         mime="image/png",
-                        key=f"download_{i}",
-                        use_container_width=True
+                        key=f"download_{i}"
                     )
-    elif model_choice == "Pre-Trained Flan-T5 Model" and st.session_state['description']:
-        st.header("AI-Generated Architectural Description")
-        st.write(st.session_state['description'])
+    elif model_choice == "Pre-Trained Layout Generator" and st.session_state.get('layout_img'):
+        st.header("Generated Layout")
+        st.image(st.session_state['layout_img'], use_column_width=True)
