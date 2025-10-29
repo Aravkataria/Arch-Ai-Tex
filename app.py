@@ -16,7 +16,7 @@ col1, col2 = st.columns([3, 1])
 with col1:
     st.title("Arch-Ai-Tex")
 with col2:
-    st.image("QR.png", width=110)
+    st.image("QR.jpeg", width=110)
     st.caption("Scan the QR to view the full project or GitHub repository")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -68,3 +68,20 @@ def load_room_predictor():
         model = joblib.load(model_path)
         return model
     return None
+
+ROOM_MODEL = load_room_predictor()
+
+if ROOM_MODEL:
+    uploaded_file = st.file_uploader("Upload housing dataset (.csv)", type=["csv"])
+    if uploaded_file:
+        import pandas as pd
+        df = pd.read_csv(uploaded_file)
+        st.dataframe(df.head())
+        X = df.drop("RoomType", axis=1, errors="ignore")
+        preds = ROOM_MODEL.predict(X)
+        st.write("Predictions:", preds)
+else:
+    st.warning("Room predictor model not found. Please upload it to the repo.")
+
+st.markdown("---")
+st.markdown("© 2025 Arch-Ai-Tex | AI-powered Architectural Design Tool")
