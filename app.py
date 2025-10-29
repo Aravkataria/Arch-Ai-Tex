@@ -99,7 +99,41 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
     return dwelling_type, images
 
+# ---------------------- LAYOUT GENERATOR HELPERS ----------------------
+def generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h):
+    rooms = []
+    base_names = ["living+dining", "bedroom_1", "bedroom_2", "kitchen", "bathroom", "utility"]
+    ratios = [0.3, 0.2, 0.2, 0.15, 0.1, 0.05]
 
+    for i in range(num_rooms):
+        name = base_names[i % len(base_names)]
+        area = round(total_area * ratios[i % len(ratios)], 1)
+        rooms.append({"name": name, "area": area})
+    return {"rooms": rooms}, None
+
+
+def plot_layout(layout, width, height, title):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    x, y = 0, 0
+    colors = ["#cce5df", "#d1b3ff", "#b3e0ff", "#ffcccc", "#c2f0c2", "#fff0b3"]
+
+    for i, r in enumerate(layout["rooms"]):
+        w = np.sqrt(r["area"])
+        h = w
+        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)],
+                             edgecolor="black", linewidth=1.5)
+        ax.add_patch(rect)
+        ax.text(x + w/2, y + h/2, f"{r['name']}\n{r['area']} sqm",
+                ha="center", va="center", fontsize=9)
+        y += h + 0.2
+
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
+    ax.set_title(title + f" — {width:.1f}m × {height:.1f}m")
+    ax.set_aspect("equal")
+    plt.tight_layout()
+    return fig
+    
 # ---------------------- STYLING ----------------------
 st.markdown("""
 <style>
@@ -208,39 +242,3 @@ else:
 
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
-
-
-# ---------------------- LAYOUT GENERATOR HELPERS ----------------------
-def generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h):
-    rooms = []
-    base_names = ["living+dining", "bedroom_1", "bedroom_2", "kitchen", "bathroom", "utility"]
-    ratios = [0.3, 0.2, 0.2, 0.15, 0.1, 0.05]
-
-    for i in range(num_rooms):
-        name = base_names[i % len(base_names)]
-        area = round(total_area * ratios[i % len(ratios)], 1)
-        rooms.append({"name": name, "area": area})
-    return {"rooms": rooms}, None
-
-
-def plot_layout(layout, width, height, title):
-    fig, ax = plt.subplots(figsize=(6, 6))
-    x, y = 0, 0
-    colors = ["#cce5df", "#d1b3ff", "#b3e0ff", "#ffcccc", "#c2f0c2", "#fff0b3"]
-
-    for i, r in enumerate(layout["rooms"]):
-        w = np.sqrt(r["area"])
-        h = w
-        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)],
-                             edgecolor="black", linewidth=1.5)
-        ax.add_patch(rect)
-        ax.text(x + w/2, y + h/2, f"{r['name']}\n{r['area']} sqm",
-                ha="center", va="center", fontsize=9)
-        y += h + 0.2
-
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_title(title + f" — {width:.1f}m × {height:.1f}m")
-    ax.set_aspect("equal")
-    plt.tight_layout()
-    return fig
