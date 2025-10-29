@@ -86,6 +86,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         with torch.no_grad():
             img_tensor = generator(z)
             img_np = img_tensor.squeeze().cpu().numpy()
+            print("DEBUG:", torch.min(generated), torch.max(generated), generated.shape)
             img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
 
             if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
