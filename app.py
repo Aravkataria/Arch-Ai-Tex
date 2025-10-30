@@ -14,46 +14,53 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-DEVICE = torch.device("cpu")
-LATENT_DIM = 100
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+LATENT_DIM = 128
 CHANNELS = 1
 IMG_SIZE = 256
 
-class DCGAN_Generator(nn.Module):
-    @staticmethod
-    def block(in_f, out_f):
-        return nn.Sequential(
-            nn.BatchNorm2d(in_f),
-            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
-            nn.ReLU(True)
-        )
-    def __init__(self, latent_dim=100, channels=1):
+class Generator(nn.Module):
+    def __init__(self, latent_dim):
         super().__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
-        self.gen = nn.Sequential(
-            DCGAN_Generator.block(512, 256),
-            DCGAN_Generator.block(256, 128),
-            DCGAN_Generator.block(128, 64),
-            nn.ConvTranspose2d(64, channels, 4, 2, 1),
+        self.net = nn.Sequential(
+            nn.ConvTranspose2d(latent_dim, 1024, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(1024),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(1024, 512, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 1, 4, 2, 1, bias=False),
             nn.Tanh()
         )
+
     def forward(self, z):
-        out = self.fc(z).view(z.size(0), 512, 16, 16)
-        return self.gen(out)
+        return self.net(z)
 
 @st.cache_resource
 def load_models():
     rf_model = None
-    generator = DCGAN_Generator().to(DEVICE)
+    generator = Generator(LATENT_DIM).to(DEVICE)
     try:
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
         pass
     try:
-        state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
+        state_dict = torch.load("generator_epoch_100.pth", map_location=DEVICE)
         generator.load_state_dict(state_dict)
-    except Exception:
-        pass
+    except Exception as e:
+        st.warning(f"Could not load generator weights: {e}")
     generator.eval()
     return rf_model, generator
 
@@ -75,7 +82,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         area = 100
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
     for _ in range(count):
-        z = torch.randn(1, LATENT_DIM).to(DEVICE)
+        z = torch.randn(1, LATENT_DIM, 1, 1, device=DEVICE)
         with torch.no_grad():
             img_tensor = generator(z)
             img_np = img_tensor.squeeze().cpu().numpy()
@@ -189,9 +196,8 @@ if mode == "GAN Generator":
         house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
 
     area_m2 = house_length * house_width
-    if area_m2 < 100:
-        area_m2 = 100
-    area_sqft = area_m2 * 10.7639  # Convert to square feet
+    area_m2 = max(area_m2, 100)
+    area_sqft = area_m2 * 10.7639
 
     st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m²  (≈ {area_sqft:.0f} sq ft)**")
 
@@ -199,11 +205,9 @@ if mode == "GAN Generator":
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
-        # Use square feet for prediction
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_sqft, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
-
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
