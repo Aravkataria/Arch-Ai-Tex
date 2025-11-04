@@ -8,17 +8,21 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import cv2
 import math
+import torchvision.transforms as T
+from torchvision import models
 import warnings
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 
+
+# --------------------------- Generator ---------------------------
 class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
@@ -43,24 +47,34 @@ class DCGAN_Generator(nn.Module):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
+
+# --------------------------- Load Models ---------------------------
 @st.cache_resource
 def load_models():
     rf_model = None
     generator = DCGAN_Generator().to(DEVICE)
+    seg_model = models.segmentation.deeplabv3_resnet101(pretrained=True).to(DEVICE)
+    seg_model.eval()
+
     try:
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
         pass
+
     try:
         state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
         generator.load_state_dict(state_dict)
     except Exception:
         pass
+
     generator.eval()
-    return rf_model, generator
+    return rf_model, generator, seg_model
 
-RF_MODEL, GAN_MODEL = load_models()
 
+RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
+
+
+# --------------------------- Prediction Helpers ---------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Unknown Type"
@@ -70,9 +84,12 @@ def predict_dwelling_type(area, bedrooms, rf_model):
     except Exception:
         return "Prediction Failed"
 
+
+# --------------------------- GAN Floorplan Generation ---------------------------
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
     images = []
+
     if area < 100:
         area = 100
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
@@ -86,18 +103,54 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
             img_tensor = generator(z)
             img_np = img_tensor.squeeze().cpu().numpy()
             img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
+
             if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
                 img_np = np.transpose(img_np, (1, 2, 0))
+
             if denoise:
                 if CHANNELS == 1:
                     img_np = cv2.fastNlMeansDenoising(img_np, None, h=10)
                 else:
                     img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10)
+
             mode = 'L' if CHANNELS == 1 else 'RGB'
             img = Image.fromarray(img_np, mode)
             images.append(img)
+
     return dwelling_type, images, pixel_area
 
+
+# --------------------------- Semantic Segmentation ---------------------------
+def segment_image(seg_model, image_pil):
+    if image_pil.mode != "RGB":
+        image_pil = image_pil.convert("RGB")
+
+    transform = T.Compose([
+        T.Resize((256, 256)),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225])
+    ])
+
+    img_tensor = transform(image_pil).unsqueeze(0).to(DEVICE)
+
+    with torch.no_grad():
+        output = seg_model(img_tensor)["out"][0]
+    output_predictions = output.argmax(0).cpu().numpy()
+
+    colors = np.array([
+        [0, 0, 0], [128, 0, 0], [0, 128, 0], [128, 128, 0],
+        [0, 0, 128], [128, 0, 128], [0, 128, 128], [128, 128, 128],
+        [64, 0, 0], [192, 0, 0], [64, 128, 0], [192, 128, 0],
+        [64, 0, 128], [192, 0, 128], [64, 128, 128], [192, 128, 128],
+        [0, 64, 0], [128, 64, 0], [0, 192, 0], [128, 192, 0],
+        [0, 64, 128]
+    ])
+    r = Image.fromarray(colors[output_predictions % len(colors)].astype(np.uint8))
+    return r
+
+
+# --------------------------- Optimized Layout ---------------------------
 def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
     num_bedrooms = max(0, int(num_bedrooms))
@@ -118,6 +171,7 @@ def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape
     if abs(diff) >= 0.01:
         rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
     return {"rooms": rooms}, ""
+
 
 def plot_layout(layout, plot_w, plot_h, title="Layout"):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -152,6 +206,8 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     ax.set_title(title)
     return fig
 
+
+# --------------------------- UI ---------------------------
 st.markdown("""
 <style>
 .stButton>button {
@@ -160,17 +216,10 @@ st.markdown("""
     border-radius: 8px;
     padding: 10px 24px;
     font-size: 1.05em;
-    transition: all 0.15s;
     border: none;
 }
 .stButton>button:hover {
     background-color: #45a049;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-}
-.stImage > img {
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -178,7 +227,7 @@ st.markdown("""
 col1, col2 = st.columns([0.8, 0.2])
 with col1:
     st.title("Arch-Ai-Tex")
-    st.markdown("AI Floor Plan Generator")
+    st.markdown("AI Floor Plan Generator with Automatic Segmentation")
 with col2:
     st.image("QR.png", width=110)
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
@@ -187,6 +236,7 @@ st.markdown("---")
 
 mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 
+# --------------------------- GAN Mode ---------------------------
 if mode == "GAN Generator":
     col_len, col_wid = st.columns(2)
     with col_len:
@@ -195,12 +245,10 @@ if mode == "GAN Generator":
         house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
 
     area_m2 = house_length * house_width
-    if area_m2 < 100:
-        area_m2 = 100
+    area_m2 = max(area_m2, 100)
     area_sqft = area_m2 * 10.7639
 
-    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m²  (≈ {area_sqft:.0f} sq ft)**")
-
+    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
 
@@ -212,27 +260,32 @@ if mode == "GAN Generator":
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
-        cols = st.columns(3)
-        for i, col in enumerate(cols):
-            if i < len(floor_plan_images):
-                img = floor_plan_images[i]
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                col.image(img, caption=f"Plan {i+1}", use_column_width=True)
-                col.download_button(
-                    label=f"Download Plan {i+1}",
-                    data=buf.getvalue(),
-                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
-                    mime="image/png",
-                )
 
+        for i, img in enumerate(floor_plan_images):
+            col = st.container()
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            col.image(img, caption=f"Generated Plan {i+1}", use_column_width=True)
+
+            seg_img = segment_image(SEG_MODEL, img)
+            seg_buf = io.BytesIO()
+            seg_img.save(seg_buf, format="PNG")
+            col.image(seg_img, caption=f"Segmented Layout {i+1}", use_column_width=True)
+
+            st.download_button(
+                label=f"Download Plan {i+1}",
+                data=buf.getvalue(),
+                file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                mime="image/png",
+            )
+
+# --------------------------- Optimized Layout Mode ---------------------------
 else:
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
         num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
     colW, colH = st.columns(2)
@@ -240,6 +293,7 @@ else:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
+
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
             layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
