@@ -116,23 +116,33 @@ def apply_segmentation(model, image, num_rooms):
     input_tensor = transform(image).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
         output = model(input_tensor)['out'][0]
-    seg_mask = output.argmax(0).cpu().numpy().astype(np.int32)
-    unique = np.unique(seg_mask)
-    unique = unique[unique != 0]
-    if unique.size == 0:
-        seg_image = Image.new("RGB", image.size, (220,220,220))
-        return seg_image
-    if unique.size > num_rooms:
-        unique = unique[:num_rooms]
-    colors = [
-        (31,119,180),(255,127,14),(44,160,44),(214,39,40),(148,103,189),
-        (140,86,75),(227,119,194),(127,127,127),(188,189,34),(23,190,207)
-    ]
+    
+    # FIX: Since the model is not trained on floor plans, we generate a binary
+    # mask of 'something' vs 'background' and color it, rather than trying 
+    # to extract meaningful room classes from the general-purpose model's output.
+    seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
+    
     h, w = seg_mask.shape
+    
+    # Treat any non-background prediction (label > 0) as 'structure/foreground'
+    binary_mask = (seg_mask > 0).astype(np.uint8) * 255
+    
+    # Optional: Clean up the mask slightly
+    kernel = np.ones((3,3),np.uint8)
+    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    
+    # Create the RGB image for visualization
     seg_rgb = np.zeros((h, w, 3), dtype=np.uint8)
-    for i, label in enumerate(unique):
-        color = colors[i % len(colors)]
-        seg_rgb[seg_mask == label] = color
+    
+    # Color for the foreground (where the model predicted something)
+    foreground_color = (31, 119, 180) # A standard blue
+    # Color for the background (where the model predicted label 0)
+    background_color = (220, 220, 220) # Light gray
+    
+    # Apply colors
+    seg_rgb[binary_mask > 0] = foreground_color
+    seg_rgb[binary_mask == 0] = background_color
+    
     seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
