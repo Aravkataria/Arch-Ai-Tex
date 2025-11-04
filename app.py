@@ -52,12 +52,18 @@ def load_models():
     try:
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
-        pass
-    try:
-        state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
-        generator.load_state_dict(state_dict)
-    except Exception:
-        pass
+        rf_model = None
+    loaded = False
+    for fname in ("generator_epoch100.pth", "generator_epoch_100.pth", "generator.pth"):
+        try:
+            state_dict = torch.load(fname, map_location=DEVICE)
+            generator.load_state_dict(state_dict, strict=False)
+            loaded = True
+            break
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
     generator.eval()
     seg_model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE).eval()
     return rf_model, generator, seg_model
@@ -101,7 +107,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
 def apply_segmentation(model, image, num_rooms):
     transform = T.Compose([
-        T.Resize((256, 256)),
+        T.Resize((IMG_SIZE, IMG_SIZE)),
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -110,15 +116,24 @@ def apply_segmentation(model, image, num_rooms):
     input_tensor = transform(image).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
         output = model(input_tensor)['out'][0]
-    seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
-    unique_labels = np.unique(seg_mask)
-    if len(unique_labels) > num_rooms:
-        unique_labels = unique_labels[:num_rooms]
-    colors = plt.cm.get_cmap('tab20', len(unique_labels))
-    seg_image = np.zeros((seg_mask.shape[0], seg_mask.shape[1], 3), dtype=np.uint8)
-    for i, label in enumerate(unique_labels):
-        seg_image[seg_mask == label] = np.array(colors(i)[:3]) * 255
-    seg_pil = Image.fromarray(seg_image)
+    seg_mask = output.argmax(0).cpu().numpy().astype(np.int32)
+    unique = np.unique(seg_mask)
+    unique = unique[unique != 0]
+    if unique.size == 0:
+        seg_image = Image.new("RGB", image.size, (220,220,220))
+        return seg_image
+    if unique.size > num_rooms:
+        unique = unique[:num_rooms]
+    colors = [
+        (31,119,180),(255,127,14),(44,160,44),(214,39,40),(148,103,189),
+        (140,86,75),(227,119,194),(127,127,127),(188,189,34),(23,190,207)
+    ]
+    h, w = seg_mask.shape
+    seg_rgb = np.zeros((h, w, 3), dtype=np.uint8)
+    for i, label in enumerate(unique):
+        color = colors[i % len(colors)]
+        seg_rgb[seg_mask == label] = color
+    seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
 def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h):
