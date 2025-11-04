@@ -1,6 +1,8 @@
 import streamlit as st
 import torch
 import torch.nn as nn
+import torchvision.transforms as T
+import torchvision.models.segmentation as models
 import joblib
 import numpy as np
 import io
@@ -57,9 +59,10 @@ def load_models():
     except Exception:
         pass
     generator.eval()
-    return rf_model, generator
+    seg_model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE).eval()
+    return rf_model, generator, seg_model
 
-RF_MODEL, GAN_MODEL = load_models()
+RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
@@ -95,6 +98,28 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
             img = Image.fromarray(img_np, mode)
             images.append(img)
     return dwelling_type, images, pixel_area
+
+def apply_segmentation(model, image, num_rooms):
+    transform = T.Compose([
+        T.Resize((256, 256)),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
+    with torch.no_grad():
+        output = model(input_tensor)['out'][0]
+    seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
+    unique_labels = np.unique(seg_mask)
+    if len(unique_labels) > num_rooms:
+        unique_labels = unique_labels[:num_rooms]
+    colors = plt.cm.get_cmap('tab20', len(unique_labels))
+    seg_image = np.zeros((seg_mask.shape[0], seg_mask.shape[1], 3), dtype=np.uint8)
+    for i, label in enumerate(unique_labels):
+        seg_image[seg_mask == label] = np.array(colors(i)[:3]) * 255
+    seg_pil = Image.fromarray(seg_image)
+    return seg_pil
 
 def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
@@ -208,9 +233,11 @@ if mode == "GAN Generator":
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
+                seg_img = apply_segmentation(SEG_MODEL, img, bedrooms)
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
+                col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
