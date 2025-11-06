@@ -22,7 +22,7 @@ CHANNELS = 1
 IMG_SIZE = 256
 
 # ----------------------------
-# DCGAN Generator Architecture
+# DCGAN Generator Architecture (UNCHANGED)
 # ----------------------------
 class DCGAN_Generator(nn.Module):
     @staticmethod
@@ -53,7 +53,7 @@ class DCGAN_Generator(nn.Module):
 
 
 # ----------------------------
-# Model Loading (FIXED LOGIC)
+# Model Loading (UNCHANGED)
 # ----------------------------
 @st.cache_resource
 def load_models():
@@ -99,7 +99,7 @@ RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 
 # ----------------------------
-# Dwelling Type Prediction
+# Dwelling Type Prediction (UNCHANGED)
 # ----------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     """Predicts dwelling type. Assumes area is in m² for consistency with RF training."""
@@ -114,7 +114,7 @@ def predict_dwelling_type(area, bedrooms, rf_model):
 
 
 # ----------------------------
-# Floorplan Generation (GAN)
+# Floorplan Generation (GAN) (UNCHANGED)
 # ----------------------------
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     """
@@ -161,15 +161,12 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
 
 # ----------------------------
-# FIX: Segmentation using Connected Components Analysis (CCA)
+# FIX: Segmentation using Connected Components Analysis (CCA) (UNCHANGED)
 # ----------------------------
 def apply_segmentation(image, num_rooms):
     """
     Applies Connected Components Analysis (CCA) to identify and color separate rooms 
     in the black-and-white floorplan image.
-    
-    The 'model' parameter is removed as it's no longer needed, but the function signature
-    in the UI call handles the passing of the argument (it will be None).
     """
     if image.mode != "L":
         # Convert to grayscale NumPy array for OpenCV processing
@@ -178,13 +175,9 @@ def apply_segmentation(image, num_rooms):
         img_cv = np.array(image)
 
     # 1. Binarization: Walls are black (0), rooms are white (255)
-    # Since the generated images are inverted (white walls, black background) or grayscale, 
-    # we first invert it to get black lines on a white background, then invert to get 
-    # white rooms on a black background for CCA.
     _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV) 
 
     # 2. Connected Components Analysis to label each "room" (connected white area)
-    # Connectivity of 8 is usually better for detecting diagonally connected areas
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
 
     # 3. Create the colored segmentation map
@@ -221,71 +214,132 @@ def apply_segmentation(image, num_rooms):
     return seg_pil
 
 
-# ----------------------------
-# Layout Generation (Optimized/Semantic)
-# ----------------------------
+# ---------------------------------------------------------------------
+# UPDATED: Layout Generation (Optimized/Semantic) - Now includes more room types
+# ---------------------------------------------------------------------
 def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
-    num_rooms_input = max(0, int(num_rooms_input))
+    # Total user-defined rooms: must include fixed rooms (Living, Kitchen, Bath) and Bedrooms
+    # We'll treat the user's input as Bedrooms + 3 fixed rooms (Living, Kitchen, Washroom)
     
-    # Fixed rooms and their area ratios
-    fixed_ratios = {"living+dining": 0.28, "kitchen": 0.08, "bathroom": 0.06}
-    fixed_total = sum(fixed_ratios.values())
+    # Base fixed rooms and their target area ratios
+    # Ratios are adjusted to leave space for 'Stairs/Common', 'Porch', and 'Garden'
+    fixed_ratios = {
+        "Living/Dining": 0.25, 
+        "Kitchen": 0.08, 
+        "Washroom_1": 0.05
+    }
     
-    # Calculate the number of bedrooms (total rooms - fixed rooms)
-    num_bedrooms = max(0, num_rooms_input - len(fixed_ratios)) 
+    # Total fixed rooms *we* are allocating area for
+    total_fixed_rooms = len(fixed_ratios)
     
-    remaining_ratio = max(0.0, 1.0 - fixed_total)
+    # The minimum required rooms for a functional layout
+    min_functional_rooms = total_fixed_rooms + 1 # At least one bedroom
+
+    # Calculate the number of bedrooms
+    # User input rooms = (Bedrooms + fixed functional rooms) -> We'll assume the user
+    # meant 'total *functional* rooms (excl. exterior space)'
+    num_bedrooms = max(1, num_rooms_input - total_fixed_rooms) 
+    
+    # Calculate the area allocated to all functional rooms (interior)
+    # A standard multiplier for interior functional space
+    interior_functional_ratio = fixed_ratios["Living/Dining"] + fixed_ratios["Kitchen"] + fixed_ratios["Washroom_1"] + (num_bedrooms * 0.15)
+    
+    # Ensure a reasonable maximum interior ratio
+    interior_functional_ratio = min(interior_functional_ratio, 0.75)
+    
+    # Recalculate fixed ratios based on the interior space remaining
+    remaining_interior_ratio = interior_functional_ratio - sum(fixed_ratios.values())
+    if num_bedrooms > 0 and remaining_interior_ratio > 0.01:
+        per_bed_ratio = remaining_interior_ratio / num_bedrooms
+    else:
+        per_bed_ratio = 0.0
+
     rooms = []
 
+    # 1. Add fixed functional rooms
     for name, ratio in fixed_ratios.items():
-        rooms.append({"name": name, "area": round(total_area * ratio, 2)})
+        rooms.append({"name": name, "area": round(total_area * ratio, 2), "type": name.split('_')[0]})
 
-    if num_bedrooms > 0:
-        per_bed_ratio = remaining_ratio / num_bedrooms
-        for i in range(num_bedrooms):
-            rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
-    elif remaining_ratio > 0.01:
-        # If no bedrooms but remaining area, assign it to utility
-        rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
+    # 2. Add bedrooms
+    for i in range(num_bedrooms):
+        rooms.append({"name": f"Bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2), "type": "Bedroom"})
+    
+    current_functional_area = sum(r["area"] for r in rooms)
+    
+    # 3. Add common/circulation space (Stairs/Lobby)
+    stair_ratio = 0.08 if property_type != "Apartment" else 0.05
+    rooms.append({"name": "Stairs/Lobby", "area": round(total_area * stair_ratio, 2), "type": "Common"})
+    
+    current_interior_area = current_functional_area + rooms[-1]["area"]
+    
+    # 4. Add exterior/utility space (Porch/Balcony, Garden)
+    # The rest of the area is distributed between these "unnecessary" spaces.
+    remaining_area_ratio = max(0.0, 1.0 - (current_interior_area / total_area))
+    
+    # Split the remaining area between Garden and Porch
+    garden_ratio = remaining_area_ratio * 0.7 # Assume more garden space
+    porch_ratio = remaining_area_ratio * 0.3
+    
+    rooms.append({"name": "Garden", "area": round(total_area * garden_ratio, 2), "type": "Garden"})
+    rooms.append({"name": "Porch/Balcony", "area": round(total_area * porch_ratio, 2), "type": "Porch"})
 
     # Small correction for floating point errors
     current_sum = round(sum(r["area"] for r in rooms), 2)
     diff = round(total_area - current_sum, 2)
     if abs(diff) >= 0.01 and rooms:
+        # Add any leftover area to the Living/Dining room (the largest)
         rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
 
     return {"rooms": rooms, "num_bedrooms": num_bedrooms}, ""
 
 
-# ----------------------------
-# Layout Plotting
-# ----------------------------
+# ---------------------------------------------------------------------
+# UPDATED: Layout Plotting - Now uses color-coded boxes for schematic layout
+# ---------------------------------------------------------------------
 def plot_layout(layout, plot_w, plot_h, title="Layout"):
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_xlim(0, plot_w)
     ax.set_ylim(0, plot_h)
     ax.set_aspect('equal')
     ax.axis('off')
-    ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.2))
+
+    # Draw the boundary of the plot
+    ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=3))
     
     rooms = layout.get("rooms", [])
     total_area = sum(r["area"] for r in rooms)
     
+    # --- Color Mapping for Room Types ---
+    color_map = {
+        "Living": "#f7d9a3",    # Light Orange/Peach
+        "Kitchen": "#d3f7a3",   # Light Green
+        "Washroom": "#a3d9f7",  # Light Blue
+        "Bedroom": "#f7a3a3",   # Light Pink/Coral
+        "Common": "#f7f7a3",    # Light Yellow (Stairs/Lobby)
+        "Garden": "#82b35c",    # Deep Green (Exterior)
+        "Porch": "#bdbdbd",     # Light Gray (Exterior)
+        "utility": "#cccccc",   # Gray (Fallback)
+    }
+    
     # Scaling factor for area to plot size
     scale = (plot_w * plot_h) / max(total_area, 1.0)
     
-    pad = min(plot_w, plot_h) * 0.02
+    # Simple rectangular packing logic
+    pad = min(plot_w, plot_h) * 0.01
     x, y = pad, pad
     row_h = 0
-    colors = ["#f4cccc", "#d9ead3", "#cfe2f3", "#fff2cc", "#d9d2e9", "#c2f0c2"]
     
+    # Sort rooms for better packing (e.g., largest first, or by type)
+    rooms.sort(key=lambda r: r["area"], reverse=True) 
+
     for i, r in enumerate(rooms):
         desired_area = max(0.1, r["area"])
         rect_area = desired_area * scale
         
         # Simple non-optimized shape placement
-        w = math.sqrt(rect_area) * 1.3 # Give it a slightly rectangular shape
+        # Try to make the room more square-ish, or fit a target aspect ratio
+        w = math.sqrt(rect_area) * 1.2 # Make it slightly rectangular
         h = rect_area / w
         
         # Check if the room fits in the current row
@@ -296,21 +350,47 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
         
         # Check if the room fits vertically
         if y + h + pad > plot_h:
-            break
+            # We skip rooms that overflow the plot area
+            continue
             
-        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
+        room_type = r.get("type", "utility")
+        color = color_map.get(room_type, color_map["utility"])
+
+        # Draw the room
+        rect = plt.Rectangle((x, y), w, h, 
+                             facecolor=color, 
+                             edgecolor='black', 
+                             linewidth=1.5)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
         
+        # Add the label
+        ax.text(x + w / 2, y + h / 2, 
+                f"{r['name']}\n{r['area']:.2f} m²", 
+                ha='center', va='center', 
+                fontsize=9, 
+                color=('white' if room_type in ["Garden", "Porch"] else 'black'),
+                fontweight='bold')
+        
+        # Move to the next position
         x += w + pad
         row_h = max(row_h, h)
         
-    ax.set_title(title)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    
+    # Add a simple legend for room types
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor=c, edgecolor='black', label=t) 
+                       for t, c in color_map.items() if t in [r.get("type") for r in rooms]]
+    
+    if legend_elements:
+        # Place legend outside the plot area
+        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.05, 1), title="Room Types")
+        
     return fig
 
 
 # ----------------------------
-# Streamlit UI
+# Streamlit UI (UNCHANGED from original, except for the calls)
 # ----------------------------
 st.markdown("""
 <style>
@@ -340,6 +420,7 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
+    # Assuming 'QR.png' exists
     st.image("QR.png", width=110)
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
@@ -347,7 +428,7 @@ st.markdown("---")
 mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 
 # ----------------------------
-# Mode 1: GAN Floorplan Generation
+# Mode 1: GAN Floorplan Generation (UNCHANGED)
 # ----------------------------
 if mode == "GAN Generator":
     col_len, col_wid = st.columns(2)
@@ -369,11 +450,9 @@ if mode == "GAN Generator":
     
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         
-        # --- CRITICAL FIX APPLIED HERE (FROM PREVIOUS TURN) ---
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
-        # --------------------------------
         
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
@@ -389,7 +468,7 @@ if mode == "GAN Generator":
                 img.save(buf, format="PNG")
                 
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
-                col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                col.image(seg_img, caption=f"Segmented Plan {i+1}", use_container_width=True)
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
@@ -398,28 +477,29 @@ if mode == "GAN Generator":
                 )
 
 # ----------------------------
-# Mode 2: Optimized Layout
+# Mode 2: Optimized Layout (UPDATED CALLS)
 # ----------------------------
 else:
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
+        # Note: num_rooms_input now represents (Bedrooms + 3 Fixed Rooms)
+        num_rooms_input = st.number_input("Enter Total Number of Functional Rooms (e.g., 4 for 1 Bed, 5 for 2 Bed)", min_value=1, value=5)
         
-    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:13px; color:gray;'>Functional rooms include the Living Area, Kitchen, Washroom, and all Bedrooms. Exterior spaces (Garden, Porch) are calculated automatically.</p>", unsafe_allow_html=True)
     
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
     
     colW, colH = st.columns(2)
     with colW:
-        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=12.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
         
     if st.button("Generate Optimized Layout"):
-        with st.spinner("Generating layout..."):
+        with st.spinner("Generating conceptual layout and area distribution..."):
             
             # Generate semantic layout and extract the calculated number of bedrooms
             layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
@@ -427,6 +507,8 @@ else:
             # Use M² and calculated bedrooms for dwelling type prediction
             dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL) 
             
-            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
-            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
+            st.success(f"Predicted Dwelling Type: **{dwelling_type}** | **{layout['num_bedrooms']} Bedroom Design**")
+            
+            # Plot the new, schematic layout
+            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Conceptual Layout")
             st.pyplot(fig)
