@@ -56,13 +56,27 @@ def load_models():
     except Exception:
         rf_model = None
 
-    try:
-        state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
-        generator.load_state_dict(state_dict, strict=False)
-    except FileNotFoundError:
-        st.error("GAN generator file 'generator_epoch100.pth' not found.")
-    except Exception as e:
-        st.error(f"Error loading GAN generator: {e}")
+    # ✅ Fixed GAN loading logic — checks multiple common filenames
+    loaded = False
+    possible_files = [
+        "generator_epoch100.pth",
+        "generator_epoch_100.pth",
+        "generator.pth"
+    ]
+    for fname in possible_files:
+        try:
+            state_dict = torch.load(fname, map_location=DEVICE)
+            generator.load_state_dict(state_dict, strict=False)
+            loaded = True
+            break
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            st.warning(f"Error loading GAN generator from '{fname}': {e}")
+            continue
+
+    if not loaded:
+        st.error("GAN generator weights not found in any of the expected files.")
 
     generator.eval()
     return rf_model, generator, None
