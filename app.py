@@ -28,32 +28,33 @@ class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
         return nn.Sequential(
-            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(out_f),
+            nn.BatchNorm2d(in_f),
+            # FIX: Added bias=False to ConvTranspose2d (standard DCGAN practice)
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1, bias=False), 
             nn.ReLU(True)
         )
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
+        # Initial projection layer
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)  
+        # Main upsampling layers
         self.gen = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, 512, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(512),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
+            DCGAN_Generator.block(512, 256),
+            DCGAN_Generator.block(256, 128),
+            DCGAN_Generator.block(128, 64),
+            # FIX: Added bias=False to the final output layer
             nn.ConvTranspose2d(64, channels, 4, 2, 1, bias=False),
             nn.Tanh()
         )
 
     def forward(self, z):
-        return self.gen(z)
+        # FIX: Flatten z from (B, L, 1, 1) to (B, L) before the linear layer
+        z_flat = z.view(z.size(0), -1) 
+        # Project and reshape to start spatial generation
+        out = self.fc(z_flat).view(z.size(0), 512, 16, 16) 
+        return self.gen(out)
+
 
 # ----------------------------
 # Model Loading (FIXED LOGIC)
