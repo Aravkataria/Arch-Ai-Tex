@@ -49,8 +49,11 @@ class DCGAN_Generator(nn.Module):
         )
 
     def forward(self, z):
-        # FIX: Flatten z from (B, L, 1, 1) to (B, L) before the linear layer
-        z_flat = z.view(z.size(0), -1) 
+        # FIX: Using .squeeze(-1).squeeze(-1) to explicitly remove the 1x1 spatial 
+        # dimensions (if they exist) and ensure the tensor is strictly 2D (B, L) 
+        # for the nn.Linear layer, which is the root cause of the linear operation error.
+        z_flat = z.squeeze(-1).squeeze(-1)
+        
         # Project and reshape to start spatial generation
         out = self.fc(z_flat).view(z.size(0), 512, 16, 16) 
         return self.gen(out)
