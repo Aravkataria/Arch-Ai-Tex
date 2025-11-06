@@ -340,10 +340,8 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    # Placeholder for QR/Logo image
-    st.image("https://placehold.co/110x110/38761D/ffffff?text=LOGO", width=110) 
+    st.image("QR.png", width=110)
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
-
 st.markdown("---")
 mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 
