@@ -284,7 +284,7 @@ if mode == "GAN Generator":
 
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
-            GAN_MODEL, area_sqft, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+            GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
