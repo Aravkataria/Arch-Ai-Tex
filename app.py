@@ -28,31 +28,32 @@ class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
         return nn.Sequential(
-            nn.BatchNorm2d(in_f),
-            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(out_f),
             nn.ReLU(True)
         )
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
-        # Initial projection layer
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)  
-        # Main upsampling layers
         self.gen = nn.Sequential(
-            DCGAN_Generator.block(512, 256),
-            DCGAN_Generator.block(256, 128),
-            DCGAN_Generator.block(128, 64),
-            nn.ConvTranspose2d(64, channels, 4, 2, 1),
+            nn.ConvTranspose2d(latent_dim, 512, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, channels, 4, 2, 1, bias=False),
             nn.Tanh()
         )
 
     def forward(self, z):
-        # FIX: Flatten z from (B, L, 1, 1) to (B, L) before the linear layer
-        z_flat = z.view(z.size(0), -1) 
-        # Project and reshape to start spatial generation
-        out = self.fc(z_flat).view(z.size(0), 512, 16, 16) 
-        return self.gen(out)
-
+        return self.gen(z)
 
 # ----------------------------
 # Model Loading (FIXED LOGIC)
