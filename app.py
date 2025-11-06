@@ -114,4 +114,4 @@ if st.button("Generate Floorplans"):
             data=byte_im,
             file_name=f"segmented_plan_{i+1}.png",
             mime="image/png"
-        )
+        )  
