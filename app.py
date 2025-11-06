@@ -47,8 +47,10 @@ class DCGAN_Generator(nn.Module):
         )
 
     def forward(self, z):
-        # Reshape to start spatial generation
-        out = self.fc(z).view(z.size(0), 512, 16, 16) 
+        # FIX: Flatten z from (B, L, 1, 1) to (B, L) before the linear layer
+        z_flat = z.view(z.size(0), -1) 
+        # Project and reshape to start spatial generation
+        out = self.fc(z_flat).view(z.size(0), 512, 16, 16) 
         return self.gen(out)
 
 
@@ -135,6 +137,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
     for i in range(count):
         torch.manual_seed(seed_base + i)
+        # Standard DCGAN noise shape
         z = torch.randn(1, LATENT_DIM, 1, 1).to(DEVICE)
         
         with torch.no_grad():
