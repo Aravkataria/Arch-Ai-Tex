@@ -85,10 +85,12 @@ def load_models():
         st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
 
     generator.eval()
-    # Load DeepLabV3 for general-purpose segmentation visualization
-    seg_model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE).eval()
-    return rf_model, generator, seg_model
+    # DeepLabV3 model is no longer necessary for the segmentation fix, 
+    # but we will return None to avoid breaking the calling structure.
+    return rf_model, generator, None # SEG_MODEL is now None
 
+
+# Rerunning model loading with the updated function.
 RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 
@@ -155,45 +157,62 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
 
 # ----------------------------
-# Segmentation (General Purpose DeepLabV3 - binary mask workaround)
+# FIX: Segmentation using Connected Components Analysis (CCA)
 # ----------------------------
-def apply_segmentation(model, image, num_rooms):
+def apply_segmentation(image, num_rooms):
     """
-    Uses a general-purpose segmentation model (DeepLabV3) to crudely identify 
-    foreground structure vs. background.
+    Applies Connected Components Analysis (CCA) to identify and color separate rooms 
+    in the black-and-white floorplan image.
+    
+    The 'model' parameter is removed as it's no longer needed, but the function signature
+    in the UI call handles the passing of the argument (it will be None).
     """
-    transform = T.Compose([
-        T.Resize((IMG_SIZE, IMG_SIZE)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-    if image.mode != "RGB":
-        image = image.convert("RGB")
-    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
-    with torch.no_grad():
-        output = model(input_tensor)['out'][0]
+    if image.mode != "L":
+        # Convert to grayscale NumPy array for OpenCV processing
+        img_cv = np.array(image.convert("L"))
+    else:
+        img_cv = np.array(image)
+
+    # 1. Binarization: Walls are black (0), rooms are white (255)
+    # Since the generated images are inverted (white walls, black background) or grayscale, 
+    # we first invert it to get black lines on a white background, then invert to get 
+    # white rooms on a black background for CCA.
+    _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV) 
+
+    # 2. Connected Components Analysis to label each "room" (connected white area)
+    # Connectivity of 8 is usually better for detecting diagonally connected areas
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
+
+    # 3. Create the colored segmentation map
+    seg_rgb = np.zeros((*img_cv.shape, 3), dtype=np.uint8)
     
-    # Get the predicted class index for each pixel
-    seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
-    h, w = seg_mask.shape
+    # Define a list of appealing colors for rooms
+    room_colors = [
+        (255, 199, 107),  # Light Orange/Peach
+        (130, 202, 157),  # Light Green/Mint
+        (174, 199, 232),  # Light Blue/Periwinkle
+        (255, 152, 150),  # Light Red/Coral
+        (197, 176, 213),  # Light Purple/Lavender
+        (255, 237, 111),  # Light Yellow
+        (188, 189, 34),   # Olive
+        (140, 86, 75),    # Brown
+    ]
     
-    # Treat any non-background prediction (label > 0) as 'structure/foreground'
-    binary_mask = (seg_mask > 0).astype(np.uint8) * 255
-    
-    # Optional: Clean up the mask slightly
-    kernel = np.ones((3,3),np.uint8)
-    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    
-    # Create the RGB image for visualization
-    seg_rgb = np.zeros((h, w, 3), dtype=np.uint8)
-    
-    foreground_color = (31, 119, 180) # Blue
-    background_color = (220, 220, 220) # Light gray
-    
-    # Apply colors
-    seg_rgb[binary_mask > 0] = foreground_color
-    seg_rgb[binary_mask == 0] = background_color
-    
+    # Label 0 is typically the background (the largest component, often the exterior)
+    # We skip label 0 and apply colors to labels 1 through num_labels-1
+    for i in range(1, num_labels):
+        # Optional: Skip very small components (noise)
+        if stats[i, cv2.CC_STAT_AREA] < 50: 
+            continue 
+
+        # Pick a color based on component index
+        color_index = (i - 1) % len(room_colors)
+        color = room_colors[color_index]
+        
+        # Apply the color to all pixels belonging to this component (room)
+        seg_rgb[labels == i] = color
+
+    # Convert back to PIL Image
     seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
@@ -347,8 +366,7 @@ if mode == "GAN Generator":
     
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         
-        # --- CRITICAL FIX APPLIED HERE ---
-        # Passing area_m2 to the generator/predictor for consistent conditioning.
+        # --- CRITICAL FIX APPLIED HERE (FROM PREVIOUS TURN) ---
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
@@ -362,7 +380,8 @@ if mode == "GAN Generator":
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
-                seg_img = apply_segmentation(SEG_MODEL, img, bedrooms)
+                # Segmentation now uses the updated function which only needs the image and room count
+                seg_img = apply_segmentation(img, bedrooms) 
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 
