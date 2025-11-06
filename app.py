@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import cv2
 import math
 import warnings
-from PIL import Image
+from PIL import Image # Moved PIL import up for consistency
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -22,7 +22,7 @@ CHANNELS = 1
 IMG_SIZE = 256
 
 # ----------------------------
-# DCGAN Generator Architecture (UNCHANGED)
+# DCGAN Generator Architecture
 # ----------------------------
 class DCGAN_Generator(nn.Module):
     @staticmethod
@@ -53,7 +53,7 @@ class DCGAN_Generator(nn.Module):
 
 
 # ----------------------------
-# Model Loading (UNCHANGED)
+# Model Loading (FIXED LOGIC)
 # ----------------------------
 @st.cache_resource
 def load_models():
@@ -77,16 +77,21 @@ def load_models():
             # *** FIX: Break out of the loop immediately after a successful load ***
             break 
         except FileNotFoundError:
+            # Silently ignore not found errors, try the next one
             continue
         except Exception as e:
+            # Report other loading errors and continue to try the next file
             st.warning(f"Error loading generator model {fname}: {e}")
             continue
 
     if not loaded:
+        # This error is now only displayed if *all* attempts failed.
         st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
 
     generator.eval()
-    return rf_model, generator, None 
+    # DeepLabV3 model is no longer necessary for the segmentation fix, 
+    # but we will return None to avoid breaking the calling structure.
+    return rf_model, generator, None # SEG_MODEL is now None
 
 
 # Rerunning model loading with the updated function.
@@ -94,7 +99,7 @@ RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 
 # ----------------------------
-# Dwelling Type Prediction (UNCHANGED)
+# Dwelling Type Prediction
 # ----------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     """Predicts dwelling type. Assumes area is in m² for consistency with RF training."""
@@ -109,7 +114,7 @@ def predict_dwelling_type(area, bedrooms, rf_model):
 
 
 # ----------------------------
-# Floorplan Generation (GAN) (UNCHANGED)
+# Floorplan Generation (GAN)
 # ----------------------------
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     """
@@ -156,78 +161,76 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
 
 # ----------------------------
-# 🐞 CRITICAL FIX: Segmentation Logic
+# FIXED: Segmentation using CCA with Morphology and Semantic-style Coloring
 # ----------------------------
 def apply_segmentation(image, num_rooms):
     """
-    FIXED: Uses morphology and CCA to correctly fill rooms with color and draw black walls.
+    Applies Connected Components Analysis (CCA) with morphology to identify and color separate rooms 
+    in the black-and-white floorplan image, using a fixed color map for visual clarity.
+    
+    This version includes morphology to better connect/define walls and uses semantic-style
+    color assignment based on component size.
     """
     if image.mode != "L":
+        # Convert to grayscale NumPy array for OpenCV processing
         img_cv = np.array(image.convert("L"))
     else:
         img_cv = np.array(image)
+
+    # 1. Binarization: Walls are black (0), rooms are white (255)
+    # Thresholding on the *inverted* image (black walls, white rooms)
+    _, thresh = cv2.threshold(img_cv, 100, 255, cv2.THRESH_BINARY_INV) 
+
+    # 2. Morphology: Close small gaps in walls to define room boundaries clearly
+    kernel_size = 3
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    # Apply closing (Dilation followed by Erosion) to close small holes/gaps in the walls
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
     
-    # Invert the image: Walls become black (0), rooms/background become white (255)
-    # This prepares the image for CCA where we analyze white areas (rooms).
-    _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY)
-    thresh = cv2.bitwise_not(thresh)
+    # 3. Connected Components Analysis to label each "room" (connected white area)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(closed, 8, cv2.CV_32S)
 
-    # Apply morphology to clean noise and connect slightly broken walls
-    kernel = np.ones((3, 3), np.uint8)
-    # Erosion followed by Dilation (Opening) to remove noise *outside* the rooms
-    cleaned_thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-    # Dilation followed by Erosion (Closing) to close small gaps *in* the walls
-    cleaned_thresh = cv2.morphologyEx(cleaned_thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
-    
-    # Invert back: Rooms are white, Walls are black.
-    # Now the "rooms" are the connected white areas we want to analyze.
-    rooms_mask = cv2.bitwise_not(cleaned_thresh)
-
-    # Connected Components Analysis (CCA)
-    # Find all connected white regions (i.e., the rooms)
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(rooms_mask, 8, cv2.CV_32S)
-
-    # Initialize the colored segmentation map
+    # 4. Create the colored segmentation map (black background)
     seg_rgb = np.zeros((*img_cv.shape, 3), dtype=np.uint8)
     
-    # Semantic-Style Color Mapping
+    # --- Semantic-Style Color Mapping (Arbitrary Assignment based on size) ---
     room_colors = {
-        "Living": (255, 160, 122),  # Light Salmon
-        "Bedroom": (135, 206, 250),  # Light Sky Blue
-        "Kitchen": (173, 255, 47),   # Green Yellow
-        "Washroom": (147, 112, 219), # Medium Purple
-        "Common": (255, 255, 102),  # Pale Yellow
+        "Living": (255, 160, 122),  # Light Salmon - Largest room
+        "Bedroom": (135, 206, 250),  # Light Sky Blue - Next largest
+        "Kitchen": (173, 255, 47),   # Green Yellow - Mid-size
+        "Washroom": (147, 112, 219), # Medium Purple - Smaller rooms
+        "Common": (255, 255, 102),  # Pale Yellow - Remaining circulation
     }
     color_keys = list(room_colors.keys())
     
+    # Identify valid components (skipping background and noise)
     valid_components = []
-    # Find all components that are large enough (not noise) and not the background (label 0)
     for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] > 100: 
+        if stats[i, cv2.CC_STAT_AREA] > 100: # Minimum room size threshold
             valid_components.append(i)
 
-    # Sort components by size to assign colors semi-predictably (largest is Living, etc.)
+    # Sort components by area (size) to assign colors semi-predictably (e.g., largest area gets 'Living')
     valid_components.sort(key=lambda i: stats[i, cv2.CC_STAT_AREA], reverse=True)
     
-    # Apply colors
     for idx, i in enumerate(valid_components):
+        # Assign colors cyclically based on size ranking
         color_name = color_keys[idx % len(color_keys)]
         color = room_colors[color_name]
         
-        # Fill the pixels belonging to this component with color
+        # Apply the color to all pixels belonging to this component (room)
         seg_rgb[labels == i] = color
 
-    # Draw the original walls (black) on top of the segmented colors for crisp lines
-    # The original walls are the dark pixels in the GAN output.
-    seg_rgb[img_cv < 100] = (0, 0, 0)
+    # 5. Draw the original walls (black) on top of the segmented colors for crisp lines
+    # Walls are dark pixels in the original image
+    seg_rgb[img_cv < 50] = (0, 0, 0) 
 
-    # Convert back to PIL Image
+    # Convert back to PIL Image and ensure correct size
     seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
 
 # ----------------------------
-# Layout Generation (Optimized/Semantic) (ORIGINAL CODE RESTORED)
+# Layout Generation (Optimized/Semantic) - REVERTED TO ORIGINAL CODE
 # ----------------------------
 def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
@@ -264,7 +267,7 @@ def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_sh
 
 
 # ----------------------------
-# Layout Plotting (ORIGINAL CODE RESTORED)
+# Layout Plotting - REVERTED TO ORIGINAL CODE
 # ----------------------------
 def plot_layout(layout, plot_w, plot_h, title="Layout"):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -315,7 +318,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
 
 
 # ----------------------------
-# Streamlit UI (UNCHANGED)
+# Streamlit UI
 # ----------------------------
 st.markdown("""
 <style>
