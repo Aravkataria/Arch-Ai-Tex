@@ -60,12 +60,13 @@ def load_models():
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
         rf_model = None
-
+    
     loaded = False
     for fname in ("generator_epoch100.pth", "generator_epoch_100.pth", "generator.pth"):
         try:
             state_dict = torch.load(fname, map_location=DEVICE)
-            generator.load_state_dict(state_dict, strict=False)
+            # Use strict=False in case the model architecture changed slightly
+            generator.load_state_dict(state_dict, strict=False) 
             loaded = True
             break
         except FileNotFoundError:
@@ -78,7 +79,6 @@ def load_models():
     seg_model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE).eval()
     return rf_model, generator, seg_model
 
-
 RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 
@@ -86,10 +86,12 @@ RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 # Dwelling Type Prediction
 # ----------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
+    """Predicts dwelling type. Assumes area is in m² for consistency."""
     if rf_model is None:
         return "Unknown Type"
     try:
-        features = np.array([[float(area), int(bedrooms)]])
+        # NOTE: Assumes RF model was trained on M² area inputs
+        features = np.array([[float(area), int(bedrooms)]]) 
         return rf_model.predict(features)[0]
     except Exception:
         return "Prediction Failed"
@@ -99,6 +101,10 @@ def predict_dwelling_type(area, bedrooms, rf_model):
 # Floorplan Generation (GAN)
 # ----------------------------
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
+    """
+    Generates floor plans.
+    NOTE: 'area' parameter is expected to be in M² for proper model conditioning.
+    """
     dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
     images = []
 
@@ -106,6 +112,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         area = 100
 
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
+    # Area is used to condition the seed base
     seed_base = int(area * 10 + bedrooms * 1234)
 
     for i in range(count):
@@ -114,6 +121,8 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
         with torch.no_grad():
             img_tensor = generator(z)
             img_np = img_tensor.squeeze().cpu().numpy()
+            
+            # Post-processing: map [-1, 1] to [0, 255]
             img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
 
             if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
@@ -133,40 +142,59 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
 
 # ----------------------------
-# Improved Edge-based Segmentation (Option 1)
+# Segmentation (General Purpose DeepLabV3 - binary mask workaround)
 # ----------------------------
 def apply_segmentation(model, image, num_rooms):
-    # Convert image to grayscale
-    gray = np.array(image.convert("L"))
-
-    # Enhance features by detecting edges
-    edges = cv2.Canny(gray, 60, 150)
-
-    # Thicken the detected lines slightly
-    kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
-
-    # Prepare RGB visualization
-    seg_rgb = np.zeros((gray.shape[0], gray.shape[1], 3), dtype=np.uint8)
-
-    # Light gray background
-    seg_rgb[:] = (230, 230, 230)
-    # Draw blue where edges are detected
-    seg_rgb[edges > 0] = (50, 100, 220)
-
-    # Convert back to PIL
-    seg_pil = Image.fromarray(seg_rgb)
+    transform = T.Compose([
+        T.Resize((IMG_SIZE, IMG_SIZE)),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
+    with torch.no_grad():
+        output = model(input_tensor)['out'][0]
+    
+    # FIX: Using DeepLabV3 only for foreground/background as it's not a floorplan model
+    seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
+    h, w = seg_mask.shape
+    
+    # Treat any non-background prediction (label > 0) as 'structure/foreground'
+    binary_mask = (seg_mask > 0).astype(np.uint8) * 255
+    
+    # Optional: Clean up the mask slightly
+    kernel = np.ones((3,3),np.uint8)
+    binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    
+    # Create the RGB image for visualization
+    seg_rgb = np.zeros((h, w, 3), dtype=np.uint8)
+    
+    foreground_color = (31, 119, 180) # Blue
+    background_color = (220, 220, 220) # Light gray
+    
+    # Apply colors
+    seg_rgb[binary_mask > 0] = foreground_color
+    seg_rgb[binary_mask == 0] = background_color
+    
+    seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
 
 # ----------------------------
 # Layout Generation (Optimized)
 # ----------------------------
-def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape, plot_w, plot_h):
+def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
-    num_bedrooms = max(0, int(num_bedrooms))
+    num_rooms_input = max(0, int(num_rooms_input))
+    
+    # Fixed rooms and their area ratios
     fixed_ratios = {"living+dining": 0.28, "kitchen": 0.08, "bathroom": 0.06}
     fixed_total = sum(fixed_ratios.values())
+    
+    # Calculate the number of bedrooms based on total rooms input (assuming 3 fixed rooms)
+    num_bedrooms = max(0, num_rooms_input - len(fixed_ratios)) 
+    
     remaining_ratio = max(0.0, 1.0 - fixed_total)
     rooms = []
 
@@ -177,15 +205,17 @@ def generate_semantic_layout(total_area, num_bedrooms, property_type, plot_shape
         per_bed_ratio = remaining_ratio / num_bedrooms
         for i in range(num_bedrooms):
             rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
-    else:
+    elif remaining_ratio > 0.01:
+        # If there are no bedrooms but remaining area, assign it to utility
         rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
 
+    # Small correction for floating point errors
     current_sum = round(sum(r["area"] for r in rooms), 2)
     diff = round(total_area - current_sum, 2)
-    if abs(diff) >= 0.01:
+    if abs(diff) >= 0.01 and rooms:
         rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
 
-    return {"rooms": rooms}, ""
+    return {"rooms": rooms, "num_bedrooms": num_bedrooms}, ""
 
 
 # ----------------------------
@@ -198,29 +228,43 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     ax.set_aspect('equal')
     ax.axis('off')
     ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.2))
+    
     rooms = layout.get("rooms", [])
     total_area = sum(r["area"] for r in rooms)
+    
+    # Scaling factor for area to plot size
     scale = (plot_w * plot_h) / max(total_area, 1.0)
+    
     pad = min(plot_w, plot_h) * 0.02
     x, y = pad, pad
     row_h = 0
     colors = ["#f4cccc", "#d9ead3", "#cfe2f3", "#fff2cc", "#d9d2e9", "#c2f0c2"]
+    
     for i, r in enumerate(rooms):
         desired_area = max(0.1, r["area"])
         rect_area = desired_area * scale
-        w = math.sqrt(rect_area) * 1.3
+        
+        # Simple non-optimized shape placement
+        w = math.sqrt(rect_area) * 1.3 # Give it a slightly rectangular shape
         h = rect_area / w
+        
+        # Check if the room fits in the current row
         if x + w + pad > plot_w:
             x = pad
             y += row_h + pad
             row_h = 0
+        
+        # Check if the room fits vertically
         if y + h + pad > plot_h:
             break
+            
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
         ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
+        
         x += w + pad
         row_h = max(row_h, h)
+        
     ax.set_title(title)
     return fig
 
@@ -256,7 +300,8 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    st.image("QR.png", width=110)
+    # Assuming "QR.png" is available
+    st.image("QR.png", width=110) 
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
@@ -271,24 +316,31 @@ if mode == "GAN Generator":
         house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
     with col_wid:
         house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
-
+    
     area_m2 = house_length * house_width
     if area_m2 < 100:
         area_m2 = 100
+        
     area_sqft = area_m2 * 10.7639
-
+    
     st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
-
+    
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-
+    
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
+        
+        # *** FIX: Pass area_m2 for consistency with model training (assumed metric) ***
+        # The GAN and RF models should be conditioned by the same unit.
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
+        # --------------------------------------------------------------------------
+        
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
+        
         cols = st.columns(3)
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
@@ -296,12 +348,14 @@ if mode == "GAN Generator":
                 seg_img = apply_segmentation(SEG_MODEL, img, bedrooms)
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
+                
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
-                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                    # File name still uses sqft for user reference
+                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png", 
                     mime="image/png",
                 )
 
@@ -313,23 +367,29 @@ else:
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-
+        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
+        
     st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
-
+    
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
-
+    
     colW, colH = st.columns(2)
     with colW:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-
+        
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
-            layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
-            dwelling_type = predict_dwelling_type(total_area, num_rooms, RF_MODEL)
+            
+            # *** FIX: Use num_rooms_input for area calculation, and calculate bedrooms for RF prediction ***
+            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
+            
+            # The dwelling predictor uses the number of bedrooms, not total rooms
+            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL) 
+            # ----------------------------------------------------------------------------------------------
+            
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
