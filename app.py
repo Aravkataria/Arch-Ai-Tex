@@ -48,7 +48,7 @@ def load_generator():
         state_dict = torch.load("generator_epoch_100.pth", map_location=DEVICE)
         model.load_state_dict(state_dict, strict=False)
     except Exception as e:
-        st.warning("Generator weights not found or incompatible, using untrained model.")
+        st.error(f"Error loading GAN generator: {e}")
     model.eval()
     return model
 
@@ -61,24 +61,26 @@ def load_segmentation_model():
 def generate_floorplan(model, latent_dim, num_images=3):
     noise = torch.randn(num_images, latent_dim, 1, 1).to(DEVICE)
     with torch.no_grad():
-        fake_images = model(noise)
-    fake_images = (fake_images * 0.5 + 0.5).cpu()
+        fake_images = model(noise).cpu()
+    # Convert from [-1, 1] → [0, 255]
+    fake_images = (fake_images * 0.5 + 0.5).clamp(0, 1)
     images = []
-    for img in fake_images:
-        arr = img.squeeze().numpy()
-        arr = np.clip(arr * 255, 0, 255).astype(np.uint8)
-        images.append(Image.fromarray(arr))
+    for img_tensor in fake_images:
+        img_np = img_tensor.squeeze().numpy()
+        img_np = (img_np * 255).astype(np.uint8)
+        img = Image.fromarray(img_np, mode="L")
+        images.append(img)
     return images
 
 def apply_segmentation(model, image, num_rooms):
     gray = np.array(image.convert("L"))
-    edges = cv2.Canny(gray, 40, 120)
+    edges = cv2.Canny(gray, 60, 150)
     kernel = np.ones((3, 3), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=1)
-    seg_rgb = np.zeros((gray.shape[0], gray.shape[1], 3), dtype=np.uint8)
-    seg_rgb[:] = (230, 230, 230)
+    seg_rgb = np.full((gray.shape[0], gray.shape[1], 3), (230, 230, 230), dtype=np.uint8)
     seg_rgb[edges > 0] = (50, 100, 220)
-    return Image.fromarray(seg_rgb)
+    seg_pil = Image.fromarray(seg_rgb)
+    return seg_pil
 
 st.title("Arch-Ai-Tex")
 
@@ -98,10 +100,10 @@ if st.button("Generate Floorplans"):
     st.subheader("Segmented Floorplans:")
     cols2 = st.columns(3)
     for i, img in enumerate(generated_plans):
-        seg_img = apply_segmentation(segmentation_model, img, num_rooms)
-        segmented_images.append(seg_img)
+        segmented_img = apply_segmentation(segmentation_model, img, num_rooms)
+        segmented_images.append(segmented_img)
         with cols2[i]:
-            st.image(seg_img, caption=f"Segmented Plan {i+1}", use_container_width=True)
+            st.image(segmented_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
 
     for i, img in enumerate(segmented_images):
         buf = io.BytesIO()
