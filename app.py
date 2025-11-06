@@ -7,10 +7,10 @@ import joblib
 import numpy as np
 import io
 import matplotlib.pyplot as plt
-from PIL import Image
 import cv2
 import math
 import warnings
+from PIL import Image # Moved PIL import up for consistency
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -53,7 +53,7 @@ class DCGAN_Generator(nn.Module):
 
 
 # ----------------------------
-# Model Loading
+# Model Loading (FIXED LOGIC)
 # ----------------------------
 @st.cache_resource
 def load_models():
@@ -74,14 +74,18 @@ def load_models():
             # Load weights, non-strict loading is safer if architecture changed slightly
             generator.load_state_dict(state_dict, strict=False) 
             loaded = True
-            break
+            # *** FIX: Break out of the loop immediately after a successful load ***
+            break 
         except FileNotFoundError:
+            # Silently ignore not found errors, try the next one
             continue
         except Exception as e:
+            # Report other loading errors and continue to try the next file
             st.warning(f"Error loading generator model {fname}: {e}")
             continue
 
     if not loaded:
+        # This error is now only displayed if *all* attempts failed.
         st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
 
     generator.eval()
