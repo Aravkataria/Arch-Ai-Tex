@@ -35,7 +35,9 @@ class DCGAN_Generator(nn.Module):
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
+        # Initial projection layer
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16) 
+        # Main upsampling layers
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
@@ -45,7 +47,8 @@ class DCGAN_Generator(nn.Module):
         )
 
     def forward(self, z):
-        out = self.fc(z).view(z.size(0), 512, 16, 16)
+        # Reshape to start spatial generation
+        out = self.fc(z).view(z.size(0), 512, 16, 16) 
         return self.gen(out)
 
 
@@ -57,25 +60,32 @@ def load_models():
     rf_model = None
     generator = DCGAN_Generator().to(DEVICE)
     try:
+        # Load the Random Forest model for dwelling type prediction
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
+        # Handle missing RF model gracefully
         rf_model = None
     
     loaded = False
+    # Attempt to load the generator weights from common names
     for fname in ("generator_epoch100.pth", "generator_epoch_100.pth", "generator.pth"):
         try:
             state_dict = torch.load(fname, map_location=DEVICE)
-            # Use strict=False in case the model architecture changed slightly
+            # Load weights, non-strict loading is safer if architecture changed slightly
             generator.load_state_dict(state_dict, strict=False) 
             loaded = True
             break
         except FileNotFoundError:
             continue
-        except Exception:
+        except Exception as e:
+            st.warning(f"Error loading generator model {fname}: {e}")
             continue
 
+    if not loaded:
+        st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
+
     generator.eval()
-    # Keep segmentation model for possible future extension
+    # Load DeepLabV3 for general-purpose segmentation visualization
     seg_model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE).eval()
     return rf_model, generator, seg_model
 
@@ -86,9 +96,9 @@ RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 # Dwelling Type Prediction
 # ----------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
-    """Predicts dwelling type. Assumes area is in m² for consistency."""
+    """Predicts dwelling type. Assumes area is in m² for consistency with RF training."""
     if rf_model is None:
-        return "Unknown Type"
+        return "Unknown Type (RF model missing)"
     try:
         # NOTE: Assumes RF model was trained on M² area inputs
         features = np.array([[float(area), int(bedrooms)]]) 
@@ -103,26 +113,29 @@ def predict_dwelling_type(area, bedrooms, rf_model):
 def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
     """
     Generates floor plans.
-    NOTE: 'area' parameter is expected to be in M² for proper model conditioning.
+    The 'area' parameter MUST be in M² (square meters) for consistency with conditioning.
     """
-    dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
+    # Prediction uses M²
+    dwelling_type = predict_dwelling_type(area, bedrooms, rf_model) 
     images = []
 
+    # Ensure minimum area for seed calculation
     if area < 100:
         area = 100
 
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
-    # Area is used to condition the seed base
+    # Area is used to condition the seed base (critical conditioning factor)
     seed_base = int(area * 10 + bedrooms * 1234)
 
     for i in range(count):
         torch.manual_seed(seed_base + i)
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
+        
         with torch.no_grad():
             img_tensor = generator(z)
             img_np = img_tensor.squeeze().cpu().numpy()
             
-            # Post-processing: map [-1, 1] to [0, 255]
+            # Post-processing: map GAN output range [-1, 1] to pixel range [0, 255]
             img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
 
             if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
@@ -145,6 +158,10 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 # Segmentation (General Purpose DeepLabV3 - binary mask workaround)
 # ----------------------------
 def apply_segmentation(model, image, num_rooms):
+    """
+    Uses a general-purpose segmentation model (DeepLabV3) to crudely identify 
+    foreground structure vs. background.
+    """
     transform = T.Compose([
         T.Resize((IMG_SIZE, IMG_SIZE)),
         T.ToTensor(),
@@ -156,7 +173,7 @@ def apply_segmentation(model, image, num_rooms):
     with torch.no_grad():
         output = model(input_tensor)['out'][0]
     
-    # FIX: Using DeepLabV3 only for foreground/background as it's not a floorplan model
+    # Get the predicted class index for each pixel
     seg_mask = output.argmax(0).cpu().numpy().astype(np.uint8)
     h, w = seg_mask.shape
     
@@ -182,7 +199,7 @@ def apply_segmentation(model, image, num_rooms):
 
 
 # ----------------------------
-# Layout Generation (Optimized)
+# Layout Generation (Optimized/Semantic)
 # ----------------------------
 def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
@@ -192,7 +209,7 @@ def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_sh
     fixed_ratios = {"living+dining": 0.28, "kitchen": 0.08, "bathroom": 0.06}
     fixed_total = sum(fixed_ratios.values())
     
-    # Calculate the number of bedrooms based on total rooms input (assuming 3 fixed rooms)
+    # Calculate the number of bedrooms (total rooms - fixed rooms)
     num_bedrooms = max(0, num_rooms_input - len(fixed_ratios)) 
     
     remaining_ratio = max(0.0, 1.0 - fixed_total)
@@ -206,7 +223,7 @@ def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_sh
         for i in range(num_bedrooms):
             rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
     elif remaining_ratio > 0.01:
-        # If there are no bedrooms but remaining area, assign it to utility
+        # If no bedrooms but remaining area, assign it to utility
         rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
 
     # Small correction for floating point errors
@@ -300,8 +317,8 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    # Assuming "QR.png" is available
-    st.image("QR.png", width=110) 
+    # Placeholder for QR/Logo image
+    st.image("https://placehold.co/110x110/38761D/ffffff?text=LOGO", width=110) 
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
@@ -330,12 +347,12 @@ if mode == "GAN Generator":
     
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         
-        # *** FIX: Pass area_m2 for consistency with model training (assumed metric) ***
-        # The GAN and RF models should be conditioned by the same unit.
+        # --- CRITICAL FIX APPLIED HERE ---
+        # Passing area_m2 to the generator/predictor for consistent conditioning.
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
-        # --------------------------------------------------------------------------
+        # --------------------------------
         
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
@@ -354,7 +371,6 @@ if mode == "GAN Generator":
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
-                    # File name still uses sqft for user reference
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png", 
                     mime="image/png",
                 )
@@ -383,12 +399,11 @@ else:
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
             
-            # *** FIX: Use num_rooms_input for area calculation, and calculate bedrooms for RF prediction ***
+            # Generate semantic layout and extract the calculated number of bedrooms
             layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
             
-            # The dwelling predictor uses the number of bedrooms, not total rooms
+            # Use M² and calculated bedrooms for dwelling type prediction
             dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL) 
-            # ----------------------------------------------------------------------------------------------
             
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
