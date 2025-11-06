@@ -3,12 +3,14 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as T
 import torchvision.models.segmentation as models
+import joblib
 import numpy as np
 import io
-from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
 import cv2
-import random
+import math
 import warnings
+from PIL import Image
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -19,112 +21,205 @@ LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 
-class Generator(nn.Module):
-    def __init__(self, latent_dim, channels):
-        super(Generator, self).__init__()
-        self.model = nn.Sequential(
-            nn.ConvTranspose2d(latent_dim, 512, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(512),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, channels, 4, 2, 1, bias=False),
+class DCGAN_Generator(nn.Module):
+    @staticmethod
+    def block(in_f, out_f):
+        return nn.Sequential(
+            nn.BatchNorm2d(in_f),
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
+            nn.ReLU(True)
+        )
+
+    def __init__(self, latent_dim=100, channels=1):
+        super().__init__()
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
+        self.gen = nn.Sequential(
+            DCGAN_Generator.block(512, 256),
+            DCGAN_Generator.block(256, 128),
+            DCGAN_Generator.block(128, 64),
+            nn.ConvTranspose2d(64, channels, 4, 2, 1),
             nn.Tanh()
         )
+
     def forward(self, z):
-        return self.model(z)
+        out = self.fc(z).view(z.size(0), 512, 16, 16)
+        return self.gen(out)
+
 
 @st.cache_resource
-def load_generator():
-    model = Generator(LATENT_DIM, CHANNELS).to(DEVICE)
+def load_models():
+    rf_model = None
+    generator = DCGAN_Generator().to(DEVICE)
+    
     try:
-        state_dict = torch.load("generator_epoch_100.pth", map_location=DEVICE)
-        model.load_state_dict(state_dict)
+        rf_model = joblib.load("room_predictor.joblib")
+    except Exception:
+        rf_model = None
+
+    try:
+        state_dict = torch.load("generator_epoch100.pth", map_location=DEVICE)
+        generator.load_state_dict(state_dict, strict=False)
+    except FileNotFoundError:
+        st.error("GAN generator file 'generator_epoch100.pth' not found.")
     except Exception as e:
         st.error(f"Error loading GAN generator: {e}")
-    model.eval()
-    return model
 
-@st.cache_resource
-def load_segmentation_model():
-    model = models.deeplabv3_resnet101(pretrained=True).to(DEVICE)
-    model.eval()
-    return model
+    generator.eval()
+    return rf_model, generator, None
 
-def generate_floorplan(model, latent_dim, num_images=3):
-    noise = torch.randn(num_images, latent_dim, 1, 1).to(DEVICE)
-    with torch.no_grad():
-        fake_images = model(noise)
-    fake_images = (fake_images * 0.5 + 0.5).cpu()
-    images = [T.ToPILImage()(img.squeeze(0)) for img in fake_images]
-    return images
 
-def draw_box_layout(num_rooms, overlay_image=None):
-    total_rooms = num_rooms + 4
-    labels = [f"Room {i+1}" for i in range(num_rooms)] + ["Kitchen", "Washroom", "Stairs", "Porch"]
-    img = Image.new("RGB", (IMG_SIZE, IMG_SIZE), (240, 240, 240))
-    draw = ImageDraw.Draw(img)
-    grid_size = int(np.ceil(np.sqrt(total_rooms + 1)))
-    cell_w = IMG_SIZE // grid_size
-    cell_h = IMG_SIZE // grid_size
-    colors = [(255, 200, 200), (200, 255, 200), (200, 200, 255), (255, 255, 200), (200, 255, 255),
-              (255, 220, 180), (220, 200, 255), (255, 180, 220), (210, 255, 210), (255, 210, 255)]
-    font = ImageFont.load_default()
-    idx = 0
-    for r in range(grid_size):
-        for c in range(grid_size):
-            if idx < total_rooms:
-                x0 = c * cell_w
-                y0 = r * cell_h
-                x1 = x0 + cell_w - 5
-                y1 = y0 + cell_h - 5
-                color = colors[idx % len(colors)]
-                draw.rectangle([x0, y0, x1, y1], fill=color, outline=(0, 0, 0), width=2)
-                text = labels[idx]
-                tw, th = draw.textsize(text, font=font)
-                draw.text((x0 + (cell_w - tw) / 2, y0 + (cell_h - th) / 2), text, fill=(0, 0, 0), font=font)
-                idx += 1
-    if idx < grid_size * grid_size:
-        draw.rectangle([0, IMG_SIZE - cell_h, IMG_SIZE, IMG_SIZE], fill=(180, 255, 180), outline=(0, 0, 0), width=2)
-        draw.text((10, IMG_SIZE - cell_h + 10), "Garden", fill=(0, 0, 0), font=font)
-    if overlay_image:
-        overlay_resized = overlay_image.resize((IMG_SIZE, IMG_SIZE)).convert("RGBA")
-        base = img.convert("RGBA")
-        overlay_resized.putalpha(70)
-        img = Image.alpha_composite(base, overlay_resized)
-    return img.convert("RGB")
+RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
-st.title("Arch-Ai-Tex")
+def predict_dwelling_type(area, bedrooms, rf_model):
+    if rf_model is None:
+        return "Unknown Type (RF model missing)"
+    try:
+        features = np.array([[float(area), int(bedrooms)]])
+        return rf_model.predict(features)[0]
+    except Exception:
+        return "Prediction Failed"
 
-num_rooms = st.slider("Number of rooms", 1, 10, 3)
-use_overlay = st.checkbox("Use AI texture overlay")
-generator_model = load_generator()
-segmentation_model = load_segmentation_model()
 
-if st.button("Generate Floorplans"):
-    generated_plans = generate_floorplan(generator_model, LATENT_DIM, num_images=3)
-    st.subheader("Generated Floorplans:")
+def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
+    dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
+    images = []
+
+    if area < 100:
+        area = 100
+
+    pixel_area = area / (IMG_SIZE * IMG_SIZE)
+    seed_base = int(area * 10 + bedrooms * 1234)
+
+    for i in range(count):
+        torch.manual_seed(seed_base + i)
+        z = torch.randn(1, LATENT_DIM, 1, 1).to(DEVICE)
+        with torch.no_grad():
+            img_tensor = generator(z)
+            img_np = img_tensor.squeeze().cpu().numpy()
+            img_np = np.clip(((img_np + 1) * 127.5), 0, 255).astype(np.uint8)
+
+            if CHANNELS > 1 and img_np.ndim == 3 and img_np.shape[0] == CHANNELS:
+                img_np = np.transpose(img_np, (1, 2, 0))
+
+            if denoise:
+                if CHANNELS == 1:
+                    img_np = cv2.fastNlMeansDenoising(img_np, None, h=10)
+                else:
+                    img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10)
+
+            mode = 'L' if CHANNELS == 1 else 'RGB'
+            img = Image.fromarray(img_np, mode)
+            images.append(img)
+
+    return dwelling_type, images, pixel_area
+
+
+def apply_segmentation(image, num_rooms):
+    if image.mode != "L":
+        img_cv = np.array(image.convert("L"))
+    else:
+        img_cv = np.array(image)
+
+    _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
+
+    seg_rgb = np.zeros((*img_cv.shape, 3), dtype=np.uint8)
+    
+    room_colors = [
+        (255, 199, 107), 
+        (130, 202, 157), 
+        (174, 199, 232), 
+        (255, 152, 150), 
+        (197, 176, 213), 
+        (255, 237, 111), 
+        (188, 189, 34),
+        (140, 86, 75),
+    ]
+    
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] < 50:
+            continue
+        color_index = (i - 1) % len(room_colors)
+        seg_rgb[labels == i] = room_colors[color_index]
+
+    seg_pil = Image.fromarray(seg_rgb).resize(image.size)
+    return seg_pil
+
+
+st.markdown("""
+<style>
+.stButton>button {
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 1.05em;
+    transition: all 0.15s;
+    border: none;
+}
+.stButton>button:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+}
+.stImage > img {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+</style>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.columns([0.8, 0.2])
+with col1:
+    st.title("Arch-Ai-Tex")
+    st.markdown("AI Floor Plan Generator")
+with col2:
+    st.image("https://placehold.co/110x110/38761D/ffffff?text=LOGO", width=110)
+    st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+col_len, col_wid = st.columns(2)
+with col_len:
+    house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
+with col_wid:
+    house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
+
+area_m2 = house_length * house_width
+if area_m2 < 100:
+    area_m2 = 100
+area_sqft = area_m2 * 10.7639
+
+st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
+
+bedrooms = st.slider("Number of Bedrooms", 1, 10, 3)
+denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+
+if st.button("Generate Floorplans", type="primary", use_container_width=True):
+    dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
+        GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+    )
+    
+    st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
+    st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
+    st.markdown("Generated Floorplans:")
+
     cols = st.columns(3)
-    for i, img in enumerate(generated_plans):
-        with cols[i]:
-            st.image(img, caption=f"Plan {i+1}", use_container_width=True)
-    st.subheader("Structured Floorplans:")
-    structured_images = []
-    cols2 = st.columns(3)
-    for i, gan_img in enumerate(generated_plans):
-        structured_img = draw_box_layout(num_rooms, overlay_image=gan_img if use_overlay else None)
-        structured_images.append(structured_img)
-        with cols2[i]:
-            st.image(structured_img, caption=f"Structured Plan {i+1}", use_container_width=True)
-    for i, img in enumerate(structured_images):
+    cols_seg = st.columns(3)
+    for i, img in enumerate(floor_plan_images):
+        seg_img = apply_segmentation(img, bedrooms)
+        
         buf = io.BytesIO()
         img.save(buf, format="PNG")
-        byte_im = buf.getvalue()
-        st.download_button(label=f"Download Plan {i+1}", data=byte_im, file_name=f"structured_plan_{i+1}.png", mime="image/png")
+        
+        cols[i].image(img, caption=f"Plan {i+1}", use_column_width=True)
+        cols_seg[i].image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+        
+        seg_buf = io.BytesIO()
+        seg_img.save(seg_buf, format="PNG")
+        cols_seg[i].download_button(
+            label=f"Download Seg. Plan {i+1}",
+            data=seg_buf.getvalue(),
+            file_name=f"segmented_plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+            mime="image/png",
+        )
