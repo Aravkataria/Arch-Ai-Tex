@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import cv2
 import math
 import warnings
-from PIL import Image
+from PIL import Image # Moved PIL import up for consistency
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -29,33 +29,26 @@ class DCGAN_Generator(nn.Module):
     def block(in_f, out_f):
         return nn.Sequential(
             nn.BatchNorm2d(in_f),
-            # FIX: Added bias=False to ConvTranspose2d (standard DCGAN practice)
-            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1, bias=False), 
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
             nn.ReLU(True)
         )
 
     def __init__(self, latent_dim=100, channels=1):
         super().__init__()
         # Initial projection layer
-        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)  
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16) 
         # Main upsampling layers
         self.gen = nn.Sequential(
             DCGAN_Generator.block(512, 256),
             DCGAN_Generator.block(256, 128),
             DCGAN_Generator.block(128, 64),
-            # FIX: Added bias=False to the final output layer
-            nn.ConvTranspose2d(64, channels, 4, 2, 1, bias=False),
+            nn.ConvTranspose2d(64, channels, 4, 2, 1),
             nn.Tanh()
         )
 
     def forward(self, z):
-        # FIX: Using .squeeze(-1).squeeze(-1) to explicitly remove the 1x1 spatial 
-        # dimensions (if they exist) and ensure the tensor is strictly 2D (B, L) 
-        # for the nn.Linear layer, which is the root cause of the linear operation error.
-        z_flat = z.squeeze(-1).squeeze(-1)
-        
-        # Project and reshape to start spatial generation
-        out = self.fc(z_flat).view(z.size(0), 512, 16, 16) 
+        # Reshape to start spatial generation
+        out = self.fc(z).view(z.size(0), 512, 16, 16) 
         return self.gen(out)
 
 
@@ -142,8 +135,7 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
 
     for i in range(count):
         torch.manual_seed(seed_base + i)
-        # Standard DCGAN noise shape
-        z = torch.randn(1, LATENT_DIM, 1, 1).to(DEVICE)
+        z = torch.randn(1, LATENT_DIM).to(DEVICE)
         
         with torch.no_grad():
             img_tensor = generator(z)
@@ -175,6 +167,9 @@ def apply_segmentation(image, num_rooms):
     """
     Applies Connected Components Analysis (CCA) to identify and color separate rooms 
     in the black-and-white floorplan image.
+    
+    The 'model' parameter is removed as it's no longer needed, but the function signature
+    in the UI call handles the passing of the argument (it will be None).
     """
     if image.mode != "L":
         # Convert to grayscale NumPy array for OpenCV processing
@@ -183,10 +178,13 @@ def apply_segmentation(image, num_rooms):
         img_cv = np.array(image)
 
     # 1. Binarization: Walls are black (0), rooms are white (255)
-    # We binarize to clearly separate lines (walls) from empty space (rooms).
+    # Since the generated images are inverted (white walls, black background) or grayscale, 
+    # we first invert it to get black lines on a white background, then invert to get 
+    # white rooms on a black background for CCA.
     _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV) 
 
     # 2. Connected Components Analysis to label each "room" (connected white area)
+    # Connectivity of 8 is usually better for detecting diagonally connected areas
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
 
     # 3. Create the colored segmentation map
@@ -205,6 +203,7 @@ def apply_segmentation(image, num_rooms):
     ]
     
     # Label 0 is typically the background (the largest component, often the exterior)
+    # We skip label 0 and apply colors to labels 1 through num_labels-1
     for i in range(1, num_labels):
         # Optional: Skip very small components (noise)
         if stats[i, cv2.CC_STAT_AREA] < 50: 
@@ -341,8 +340,7 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    # NOTE: Using a placeholder image since the 'QR.png' file is not available
-    st.image("https://placehold.co/110x110/38761D/ffffff?text=LOGO", width=110) 
+    st.image("QR.png", width=110)
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
@@ -371,9 +369,11 @@ if mode == "GAN Generator":
     
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         
+        # --- CRITICAL FIX APPLIED HERE (FROM PREVIOUS TURN) ---
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
+        # --------------------------------
         
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
@@ -383,26 +383,20 @@ if mode == "GAN Generator":
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
-                # Segmentation uses the CCA logic
+                # Segmentation now uses the updated function which only needs the image and room count
                 seg_img = apply_segmentation(img, bedrooms) 
-                
-                # Download button for the Original GAN image
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
-
-                # Download button for the Segmented image
-                seg_buf = io.BytesIO()
-                seg_img.save(seg_buf, format="PNG")
                 col.download_button(
-                    label=f"Download Seg. Plan {i+1}",
-                    data=seg_buf.getvalue(),
-                    file_name=f"segmented_plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png", 
+                    label=f"Download Plan {i+1}",
+                    data=buf.getvalue(),
+                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png", 
                     mime="image/png",
                 )
-                
+
 # ----------------------------
 # Mode 2: Optimized Layout
 # ----------------------------
