@@ -22,14 +22,14 @@ void setup() {
   Serial2.begin(9600, SERIAL_8N1, RX2_PIN, TX2_PIN);
   pinMode(LED_PIN, OUTPUT);
 
-  Serial.println("\n🚀 Booting ESP32 Sensor Bridge...");
+  Serial.println("\nBooting ESP32 Sensor Bridge...");
 
   // Try to connect using saved Wi-Fi credentials
   if (!wm.autoConnect("ESP32_Setup")) {
-    Serial.println("⚠️ WiFi AutoConnect failed, please configure manually!");
+    Serial.println("WiFi AutoConnect failed, please configure manually!");
   } else {
     wifiConnected = true;
-    Serial.print("✅ WiFi connected! IP: ");
+    Serial.print("WiFi connected! IP: ");
     Serial.println(WiFi.localIP());
   }
 }
@@ -70,7 +70,7 @@ void loop() {
     if (wifiConnected && WiFi.status() == WL_CONNECTED) {
       sendToCloud(buffer);
     } else {
-      Serial.println("⚠️ WiFi not connected. Skipping cloud update.");
+      Serial.println(" WiFi not connected. Skipping cloud update.");
     }
 
     doc.clear();
@@ -87,9 +87,9 @@ void sendToCloud(const char* jsonData) {
   int httpResponseCode = http.POST((uint8_t*)jsonData, strlen(jsonData));
 
   if (httpResponseCode > 0) {
-    Serial.printf("📤 Sent to cloud! Response: %d\n", httpResponseCode);
+    Serial.printf("Sent to cloud! Response: %d\n", httpResponseCode);
   } else {
-    Serial.printf("❌ Failed to send! Error: %s\n", http.errorToString(httpResponseCode).c_str());
+    Serial.printf("Failed to send! Error: %s\n", http.errorToString(httpResponseCode).c_str());
   }
 
   http.end();
