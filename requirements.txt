@@ -20,3 +20,6 @@ diffusers
 transformers==4.45.0
 sentencepiece
 protobuf
+
+fastapi
+uvicorn
