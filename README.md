@@ -60,9 +60,11 @@ the **Real-Time Sensor Dashboard**: capture house dimensions using ultrasonic an
   generator is one of two neural networks in a GAN system that competes against a discriminator network to create new, realistic data. The generator takes random noise as input and tries to produce synthetic data (like images or music) that is so convincing that the discriminator cannot tell it apart from real data in the original training set. Through this adversarial process, the generator continuously improves its ability to generate authentic-looking outputse.g., “Takes a 100-dimensional latent vector z, passes through fully-connected + reshape, followed by several transposed convolution / deconvolution layers, BatchNorm, ReLU activations, producing an output image of size 256×256.”  
 - **Discriminator**:
   The discriminator acts as a binary classifier helps in distinguishing between real and generated data. It learns to improve its classification ability through training, refining its parameters to detect fake samples more accurately. When dealing with image data, the discriminator uses convolutional layers or other relevant architectures which help to extract features and enhance the model’s ability.e.g., “Receives the generated or real floor plan image, passes through several convolutional layers with LeakyReLU activations, followed by a final sigmoid output indicating real vs fake.”  
-- **Circuit**
+- **Circuit**:
   the Real-Time Sensor Dashboard uses different sensor, that help it to identidfy the distace and other parameters.
-  we have used differnt electronic componenents for this model like arduino mega 2560, ESP32, HC-SR501 Passive Infrared sensor, 
+  we have used differnt electronic componenents for this model like arduino mega 2560, ESP32, HC-SR501 Passive Infrared sensor, and HC-SR04 Ultrasonic sensor, along with ESP32 for transimiting data via wifi.
+  the data is processed theough arduino mega 2560 and then is transfered by wifi by ESP32.
+  
 ### Training Details  
 
 - Optimizer: Adam (lr=0.0002, β₁=0.5, β₂=0.999)
@@ -81,6 +83,8 @@ the **Real-Time Sensor Dashboard**: capture house dimensions using ultrasonic an
 - The model supports high output resolutions: 256×256.  
 - The images is saved as .png.
 - Optional denoising applied per user input.
+- segmentation model for better understanding of structure
+- auto room layout form Optimized Layout 
 
 ## Usage / Running the Project
 ### Training
