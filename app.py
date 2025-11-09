@@ -464,3 +464,4 @@ else:
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
+#https://esp32-fastapi-server-uh47.onrender.com/
