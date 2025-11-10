@@ -9,7 +9,7 @@
 3. [Key Features](#key-features)  
 4. [Architecture & Methods](#architecture--methods)  
    - [Model Architecture](#model-architecture)  
-   - [Loss Functions & Training Details](#loss-functions--training-details)  
+   - [Loss Functions & Training Details](#training-details)  
    - [Dataset & Preprocessing](#dataset--preprocessing)  
    - [Resolution / Output Details](#resolution--output-details)
 5. [Usage / Running the Project](#usage--running-the-project)  
@@ -20,9 +20,9 @@
    - [GAN Floorplan Generator](#GAN-Floorplan-Generator)
    - [Optimized Layout Generator](#Optimized-Layout-Generator)
    - [Real-Time Sensor Dashboard](#Real-Time-Sensor-Dashboard)
-6.  [Results & Visualizations](#results--visualizations)
-7.  [Installation Instructions](#installation-instructions)
-8.  [Deployment](#Deployment)
+7.  [Results & Visualizations](#results--visualizations)
+8.  [Installation Instructions](#installation-instructions)
+9.  [Deployment](#Deployment)
 ---
 
 ## Project Overview  
@@ -92,6 +92,10 @@ the **Real-Time Sensor Dashboard**: capture house dimensions using ultrasonic an
 To train the GAN or Random Forest models from scratch, run the respective training scripts [floor_generater](floor_generater.py) and [room_predictor](room_predictor.py) respectively. 
 the [floor_generater](floor_generater.py) will save the generator.pth, discriminator.pth model, and sample images per 10th epoch and will also save the checkpoint on every epoch.
 the [room_predictor](room_predictor.py) will save the room_predictor.joblib model after training.
+
+### programing of electronic components
+
+to program the electronic components for real time Sensor Dashboard we to program Arduino mega and ESP32 with [Arduino](mega/mega.ino) and [ESP32](esp32/esp32.ino) respectively which sends data in real time to a database with [server](server.py) with a delay of ~15 sec when connected to wifi. 
 
 ### Generating Floor Plans
 
