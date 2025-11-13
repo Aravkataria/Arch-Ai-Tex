@@ -66,7 +66,7 @@ This modular design enables flexibility — users can run any stage independentl
 - **Frontend / UI:** Streamlit  
 - **Deep Learning Framework:** PyTorch  
 - **ML / Regression:** scikit-learn (Random Forest)  
-- **Hardware Integration:** Arduino Mega 2560, ESP32, HC-SR04 Ultrasonic Sensor, HC-SR501 PIR Sensor  
+- - **Hardware Integration:** Arduino Mega 2560, ESP32, HC-SR04 Ultrasonic Sensor, HC-SR501 PIR Sensor, IR Sensor
 - **Visualization:** Matplotlib, OpenCV  
 
 ## Key Features  
@@ -90,7 +90,7 @@ This modular design enables flexibility — users can run any stage independentl
 
 - **Circuit:**  
   The Real-Time Sensor Dashboard uses different sensors to identify distance and other parameters.  
-  We used components like Arduino Mega 2560, ESP32, HC-SR501 PIR sensor, and HC-SR04 Ultrasonic sensor, with the ESP32 transmitting data via Wi-Fi.  
+  We used components like Arduino Mega 2560, ESP32, HC-SR04 Ultrasonic sensor, HC-SR501 PIR sensor, and an IR sensor, with the ESP32 transmitting data via Wi-Fi. 
   Data is processed through the Arduino Mega 2560 and then transferred wirelessly by the ESP32.  
 
 ### Training Details  
@@ -160,7 +160,7 @@ This module is best suited for constraint-based design needs.
 The Optimized Layout module can be accessed via the [web app](app.py) or [deployed](https://arch-ai-tex.streamlit.app/) under “Optimized Layout Generator.”  
 
 ### Real-Time Sensor Dashboard
-The Real-Time Sensor Dashboard connects IoT sensors (HC-SR04 Ultrasonic and HC-SR501 PIR) with Arduino Mega 2560 and ESP32 modules to capture dimensions in real time.  
+The Real-Time Sensor Dashboard connects IoT sensors (HC-SR04 Ultrasonic, IR Sensor and HC-SR501 PIR) with Arduino Mega 2560 and ESP32 modules to capture dimensions in real time.  
 Captured data is transmitted via Wi-Fi and automatically used to generate new layouts through the GAN model.  
 
 The Real-Time Sensor Dashboard can be accessed via the [web app](app.py) or [deployed](https://arch-ai-tex.streamlit.app/) under “Real-Time Sensor Dashboard.”  
