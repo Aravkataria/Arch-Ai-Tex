@@ -13,6 +13,9 @@ import warnings
 from PIL import Image
 import requests
 import time
+import subprocess
+from streamlit_3d import stl_plot
+import os
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -250,21 +253,120 @@ if mode == "GAN Generator":
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
+        
         cols = st.columns(3)
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
                 seg_img = apply_segmentation(img, bedrooms)
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
+
+                # --- Display Images ---
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                
+                # Convert to bytes for download
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                img_bytes = buf.getvalue()
+                
+                # ------------------------------
+                # NORMAL DOWNLOAD BUTTON (2D)
+                # ------------------------------
                 col.download_button(
                     label=f"Download Plan {i+1}",
-                    data=buf.getvalue(),
+                    data=img_bytes,
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
+                    key=f"download2d_gan_{i}"
                 )
+                
+                # ------------------------------
+                # GENERATE 3D MODEL BUTTON
+                # ------------------------------
+                # Using st.session_state to track 3D button click reliably
+                if f"gen3d_gan_{i}" not in st.session_state:
+                    st.session_state[f"gen3d_gan_{i}"] = False
+                
+                gen3d = col.button(f"Generate 3D Model", key=f"gen3d_gan_{i}_btn", use_container_width=True)
+
+                if gen3d:
+                    # Set state to show generation output
+                    st.session_state[f"gen3d_gan_{i}"] = True
+                    st.rerun()
+
+                if st.session_state[f"gen3d_gan_{i}"] == True:
+                    st.info(f"Generating 3D model for Plan {i+1}...")
+                    
+                    # --- 3D Generation Logic Placeholder ---
+                    try:
+                        # 1. Save temp floorplan
+                        temp_png = f"temp_plan_{i}_{int(time.time())}.png"
+                        img.save(temp_png)
+                        output_glb = f"plan_{i+1}_3d_{int(time.time())}.glb"
+
+                        # 2. Run Blender (Placeholder - Requires Blender installed and blender_make_3d.py)
+                        # The following subprocess call is a placeholder and may not work in all environments.
+                        try:
+                            # Added check=True and timeout for robustness
+                            result = subprocess.run([
+                                "blender",
+                                "--background",
+                                "--python", "blender_make_3d.py",
+                                "--",
+                                temp_png,
+                                output_glb
+                            ], capture_output=True, text=True, check=True, timeout=60) 
+                            
+                            # Mocking file existence since we cannot guarantee Blender run
+                            if not os.path.exists(output_glb):
+                                glb_data = b"MOCK_GLB_DATA" 
+                                st.warning("Blender or its dependencies were not found/accessible. Using mock data for download and skipping preview.")
+                            else:
+                                with open(output_glb, "rb") as f:
+                                    glb_data = f.read()
+                                st.success(f"3D Model Generated Successfully for Plan {i+1}!")
+                                
+                                # ---- SHOW 3D PREVIEW IN STREAMLIT ----
+                                st.subheader(f"3D Preview for Plan {i+1}")
+                                stl_plot(data=glb_data, width=400, height=400) # Mocked or real preview
+
+                                # Clean up temporary files
+                                os.remove(temp_png)
+                                os.remove(output_glb)
+
+                        except subprocess.CalledProcessError as e:
+                            glb_data = b"MOCK_GLB_DATA" 
+                            st.error(f"Blender process failed. Ensure Blender is callable and 'blender_make_3d.py' is correct. Error: {e.stderr}")
+                        except FileNotFoundError:
+                            glb_data = b"MOCK_GLB_DATA" 
+                            st.error("Blender or 'blender_make_3d.py' not found. Please ensure external dependencies are set up.")
+                        except ImportError:
+                            glb_data = b"MOCK_GLB_DATA"
+                            st.error("The 'streamlit-3d' library is required to show the preview. Please install it with 'pip install streamlit-3d'.")
+                        except Exception as e:
+                            glb_data = b"MOCK_GLB_DATA" 
+                            st.error(f"An unexpected error occurred during 3D generation: {e}")
+                            
+                        # ---- DOWNLOAD 3D MODEL ----
+                        col.download_button(
+                            label=f"Download 3D Model (GLB)",
+                            data=glb_data,
+                            file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.glb",
+                            mime="model/gltf-binary",
+                            key=f"download3d_gan_{i}"
+                        )
+                        # Option to hide the 3D output
+                        if col.button("Hide 3D Output", key=f"hide3d_gan_{i}", use_container_width=True):
+                            st.session_state[f"gen3d_gan_{i}"] = False
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Critical error in 3D logic setup: {e}")
+
+# ----------------------------------------------------------------------------------------------------
+# REAL-TIME SENSOR DASHBOARD SECTION
+# ----------------------------------------------------------------------------------------------------
+
 elif mode == "Real-Time Sensor Dashboard":
     st.header("Cloud Sensor Dashboard")
     st.markdown("Fetch ultrasonic readings one at a time and confirm whether it’s **Length** or **Breadth**.")
@@ -273,6 +375,11 @@ elif mode == "Real-Time Sensor Dashboard":
     for key in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
         if key not in st.session_state:
             st.session_state[key] = None
+    
+    # Initialize 3D session states for sensor mode
+    for i in range(3):
+        if f"gen3d_sensor_{i}" not in st.session_state:
+            st.session_state[f"gen3d_sensor_{i}"] = False
 
     st.divider()
 
@@ -280,6 +387,7 @@ elif mode == "Real-Time Sensor Dashboard":
     if st.session_state.length is None and st.session_state.breadth is None and st.session_state.last_distance is None:
         if st.button("Get Sensor Data", use_container_width=True):
             try:
+                # Replace with your actual FastAPI/API endpoint
                 r = requests.get("https://esp32-fastapi-server-uh47.onrender.com/data", timeout=5)
                 if r.status_code == 200:
                     d = r.json().get("data", {})
@@ -291,7 +399,8 @@ elif mode == "Real-Time Sensor Dashboard":
                 else:
                     st.error(f"Server responded with {r.status_code}")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error connecting to sensor API: {e}")
+            st.rerun()
 
     # --- CASE 2: Have a new distance waiting to assign ---
     elif st.session_state.last_distance is not None:
@@ -351,7 +460,8 @@ elif mode == "Real-Time Sensor Dashboard":
                 else:
                     st.error(f"Server responded with {r.status_code}")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error connecting to sensor API: {e}")
+            st.rerun()
 
         # show reset for whichever one is set
         if st.session_state.length is not None:
@@ -378,19 +488,28 @@ elif mode == "Real-Time Sensor Dashboard":
                     st.session_state.length = None
                 else:
                     st.session_state.breadth = None
+                st.session_state.last_set = None
                 st.info("Latest entry cleared.")
                 st.rerun()
         with col2:
             if st.button("Reset All", use_container_width=True):
                 for k in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
                     st.session_state[k] = None
+                # Also reset 3D states
+                for i in range(3):
+                    st.session_state[f"gen3d_sensor_{i}"] = False
                 st.info("All cleared.")
                 st.rerun()
         st.divider()
+        
     st.divider()
     st.subheader("Current Measurements")
-    st.write(f"Length: {st.session_state.length if st.session_state.length else '—'} cm")
-    st.write(f"Breadth: {st.session_state.breadth if st.session_state.breadth else '—'} cm")
+    # Convert cm to m for display
+    length_m_disp = f"{st.session_state.length * 0.01:.2f}" if st.session_state.length else '—'
+    breadth_m_disp = f"{st.session_state.breadth * 0.01:.2f}" if st.session_state.breadth else '—'
+
+    st.write(f"Length: {length_m_disp} m ({st.session_state.length} cm)")
+    st.write(f"Breadth: {breadth_m_disp} m ({st.session_state.breadth} cm)")
 
     if st.session_state.pir is not None or st.session_state.ir is not None:
         st.divider()
@@ -399,6 +518,7 @@ elif mode == "Real-Time Sensor Dashboard":
         ir_status = "Obstacle Detected" if not st.session_state.ir else "Clear Path"
         st.write(f"PIR: {pir_status}")
         st.write(f"IR: {ir_status}")
+
     if st.session_state.length and st.session_state.breadth:
         st.divider()
         st.subheader("Generate Floorplan from Captured Dimensions")
@@ -412,10 +532,10 @@ elif mode == "Real-Time Sensor Dashboard":
         st.write(f"**Final Dimensions:** {length_m:.2f} m × {breadth_m:.2f} m")
         st.write(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)")
 
-        bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
-        denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+        bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1, key="sensor_beds")
+        denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False, key="sensor_denoise")
 
-        if st.button("Generate Floorplans", type="primary", use_container_width=True):
+        if st.button("Generate Floorplans", type="primary", use_container_width=True, key="sensor_generate_btn"):
             dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
                 GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
             )
@@ -429,19 +549,106 @@ elif mode == "Real-Time Sensor Dashboard":
                 if i < len(floor_plan_images):
                     img = floor_plan_images[i]
                     seg_img = apply_segmentation(img, bedrooms)
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
+
+                    # --- Display Images ---
                     col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                     col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                    
+                    # Convert to bytes for download
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    img_bytes = buf.getvalue()
+
+                    # ------------------------------
+                    # NORMAL DOWNLOAD BUTTON (2D)
+                    # ------------------------------
                     col.download_button(
                         label=f"Download Plan {i+1}",
-                        data=buf.getvalue(),
+                        data=img_bytes,
                         file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                         mime="image/png",
+                        key=f"download2d_sensor_{i}"
                     )
 
-        # Show reset options once both values are set
+                    # ------------------------------
+                    # GENERATE 3D MODEL BUTTON
+                    # ------------------------------
+                    if f"gen3d_sensor_{i}" not in st.session_state:
+                        st.session_state[f"gen3d_sensor_{i}"] = False
+                    
+                    gen3d_sensor = col.button(f"Generate 3D Model", key=f"gen3d_sensor_{i}_btn", use_container_width=True)
 
+                    if gen3d_sensor:
+                        # Set state to show generation output
+                        st.session_state[f"gen3d_sensor_{i}"] = True
+                        st.rerun()
+
+                    if st.session_state[f"gen3d_sensor_{i}"] == True:
+                        st.info(f"Generating 3D model for Plan {i+1}...")
+                        
+                        # --- 3D Generation Logic Placeholder ---
+                        try:
+                            # 1. Save temp floorplan
+                            temp_png = f"temp_plan_{i}_{int(time.time())}.png"
+                            img.save(temp_png)
+                            output_glb = f"plan_{i+1}_3d_{int(time.time())}.glb"
+
+                            # 2. Run Blender (Placeholder - Requires Blender installed and blender_make_3d.py)
+                            try:
+                                # Added check=True and timeout for robustness
+                                result = subprocess.run([
+                                    "blender",
+                                    "--background",
+                                    "--python", "blender_make_3d.py",
+                                    "--",
+                                    temp_png,
+                                    output_glb
+                                ], capture_output=True, text=True, check=True, timeout=60)
+                                
+                                if not os.path.exists(output_glb):
+                                    glb_data = b"MOCK_GLB_DATA" 
+                                    st.warning("Blender or its dependencies were not found/accessible. Using mock data for download and skipping preview.")
+                                else:
+                                    with open(output_glb, "rb") as f:
+                                        glb_data = f.read()
+                                    st.success(f"3D Model Generated Successfully for Plan {i+1}!")
+                                    
+                                    # ---- SHOW 3D PREVIEW IN STREAMLIT ----
+                                    st.subheader(f"3D Preview for Plan {i+1}")
+                                    stl_plot(data=glb_data, width=400, height=400)
+
+                                    # Clean up temporary files
+                                    os.remove(temp_png)
+                                    os.remove(output_glb)
+
+                            except subprocess.CalledProcessError as e:
+                                glb_data = b"MOCK_GLB_DATA" 
+                                st.error(f"Blender process failed. Ensure Blender is callable and 'blender_make_3d.py' is correct. Error: {e.stderr}")
+                            except FileNotFoundError:
+                                glb_data = b"MOCK_GLB_DATA" 
+                                st.error("Blender or 'blender_make_3d.py' not found. Please ensure external dependencies are set up.")
+                            except ImportError:
+                                glb_data = b"MOCK_GLB_DATA"
+                                st.error("The 'streamlit-3d' library is required to show the preview. Please install it with 'pip install streamlit-3d'.")
+                            except Exception as e:
+                                glb_data = b"MOCK_GLB_DATA" 
+                                st.error(f"An unexpected error occurred during 3D generation: {e}")
+                                
+                            # ---- DOWNLOAD 3D MODEL ----
+                            col.download_button(
+                                label=f"Download 3D Model (GLB)",
+                                data=glb_data,
+                                file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.glb",
+                                mime="model/gltf-binary",
+                                key=f"download3d_sensor_{i}"
+                            )
+                            # Option to hide the 3D output
+                            if col.button("Hide 3D Output", key=f"hide3d_sensor_{i}", use_container_width=True):
+                                st.session_state[f"gen3d_sensor_{i}"] = False
+                                st.rerun()
+
+                        except Exception as e:
+                            st.error(f"Critical error in 3D logic setup: {e}")
 
 else:
     colA, colB = st.columns(2)
