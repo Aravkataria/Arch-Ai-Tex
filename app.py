@@ -14,12 +14,52 @@ from PIL import Image
 import requests
 import time
 import subprocess
-from streamlit_3d import stl_plot
-from streamlit_3d import stl_renderer
-from st3d import st3d
 import os
+import base64
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
+
+
+def show_3d_model_glb(model_path):
+    with open(model_path, "rb") as f:
+        data = f.read()
+        b64 = base64.b64encode(data).decode()
+
+    html_code = f"""
+    <div style="height: 500px;">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
+        <div id="viewer" style="width:100%; height:500px;"></div>
+        <script>
+            var scene = new THREE.Scene();
+            var camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            var renderer = new THREE.WebGLRenderer();
+            renderer.setSize(500, 500);
+
+            document.getElementById("viewer").appendChild(renderer.domElement);
+
+            var light = new THREE.AmbientLight(0xffffff);
+            scene.add(light);
+
+            var loader = new THREE.GLTFLoader();
+            loader.parse(
+                atob("{b64}"),
+                "",
+                function (gltf) {{
+                    scene.add(gltf.scene);
+                    camera.position.z = 5;
+                    function animate() {{
+                        requestAnimationFrame(animate);
+                        renderer.render(scene, camera);
+                    }}
+                    animate();
+                }}
+            );
+        </script>
+    </div>
+    """
+
+    st.components.v1.html(html_code, height=520)
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
