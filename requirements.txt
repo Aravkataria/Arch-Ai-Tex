@@ -21,5 +21,8 @@ transformers==4.45.0
 sentencepiece
 protobuf
 
+# 3D Model Viewing
+streamlit-3d
+
 fastapi
 uvicorn
