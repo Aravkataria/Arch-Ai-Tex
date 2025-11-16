@@ -489,55 +489,194 @@ elif mode == "Optimized Layout":
 # -------------------------
 # Mode: ChatBot (integrated)
 # -------------------------
+# -------------------------
+# Mode: ChatBot (Glassmorphism + Modern UI)
+# -------------------------
 elif mode == "ChatBot":
-    st.header("💬 AEC / BIM Chatbot")
+    st.markdown(
+        """
+        <style>
+        /* Main chat container */
+        .chat-container {
+            background: rgba(255, 255, 255, 0.10);
+            backdrop-filter: blur(15px);
+            border-radius: 20px;
+            padding: 25px;
+            margin-top: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
 
+        /* Individual message bubbles */
+        .bubble {
+            padding: 15px 18px;
+            border-radius: 16px;
+            margin: 10px 0;
+            max-width: 80%;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .user-bubble {
+            background: rgba(0, 122, 255, 0.35);
+            color: white;
+            margin-left: auto;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+
+        .assistant-bubble {
+            background: rgba(255,255,255,0.25);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #000;
+            margin-right: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Typing indicator */
+        .typing {
+            width: 60px;
+            height: 18px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 0 10px;
+            margin: 10px 0;
+        }
+
+        .dot {
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+            animation: blink 1.4s infinite both;
+        }
+
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes blink {
+            0% { opacity: 0.2; transform: translateY(0); }
+            50% { opacity: 1; transform: translateY(-3px); }
+            100% { opacity: 0.2; transform: translateY(0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Floating input bar */
+        .stChatInputContainer {
+            background: rgba(255,255,255,0.35) !important;
+            backdrop-filter: blur(10px);
+            padding: 12px !important;
+            border-radius: 20px !important;
+            border: 1px solid rgba(255,255,255,0.3);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        }
+
+        .stTextInput>div>div>input {
+            border-radius: 12px !important;
+            font-size: 15px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.subheader("💬 Arch-Ai-Tex Glass AI — AEC/BIM Assistant")
+
+    # Load API key
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
-        st.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
-    else:
-        def ask_groq(messages):
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            data = {
-                "model": "llama-3.1-8b-instant",
-                "messages": messages,
-                "temperature": 0.2,
-            }
-            try:
-                resp = requests.post(url, json=data, headers=headers, timeout=30)
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
-            except Exception as e:
-                return f"Error calling LLM API: {e}"
+        st.error("API key missing — please add ARCH_AI_TEX_CHATBOT in Streamlit secrets.")
+        st.stop()
 
-        # Init chat history with a system prompt tuned to BIM/AEC
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                {"role": "system", "content": (
-                    "You are an expert AEC/BIM architect and engineer. "
-                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
-                )}
-            ]
+    def ask_groq(messages):
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        data = {
+            "model": "llama-3.1-8b-instant",
+            "messages": messages,
+            "temperature": 0.2,
+        }
+        try:
+            resp = requests.post(url, json=data, headers=headers, timeout=30)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            return f"Error calling LLM API: {e}"
 
-        # Render existing chat messages (skip system message)
-        for msg in st.session_state.chat_history[1:]:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+    # Initialize chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [
+            {"role": "system", "content": (
+                "You are Arch-Ai-Tex Glass Assistant — a premium AEC/BIM AI. "
+                "You speak clearly, professionally, and visually."
+            )}
+        ]
 
-        # Chat input
-        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-        if user_input:
-            # append user message and display it
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            st.chat_message("user").write(user_input)
+    # Render chat messages (UI bubbles)
+    for msg in st.session_state.chat_history[1:]:
+        role = msg["role"]
+        bubble_class = "user-bubble" if role == "user" else "assistant-bubble"
 
-            # call model with full conversation
-            answer = ask_groq(st.session_state.chat_history)
+        st.markdown(
+            f"""
+            <div class="bubble {bubble_class}">
+                {msg['content']}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            # append and display assistant reply
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.chat_message("assistant").write(answer)
+    # User input
+    user_input = st.chat_input("Ask your architectural or BIM question...")
+
+    if user_input:
+        # Store + show user message
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+
+        st.markdown(
+            f"""
+            <div class="bubble user-bubble">
+                {user_input}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Typing indicator
+        typing_html = """
+        <div class="typing">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+        """
+        typing_box = st.markdown(typing_html, unsafe_allow_html=True)
+
+        # Call Groq AI
+        answer = ask_groq(st.session_state.chat_history)
+
+        # Remove typing animation
+        typing_box.empty()
+
+        # Append + display assistant response
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+        st.markdown(
+            f"""
+            <div class="bubble assistant-bubble">
+                {answer}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # End of file
