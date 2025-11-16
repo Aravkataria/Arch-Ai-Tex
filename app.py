@@ -14,7 +14,8 @@ from PIL import Image
 import requests
 import time
 import subprocess
-from streamlit_3d import streamlit_3d
+from streamlit_3d import stl_plot
+from streamlit_3d import stl_renderer
 from st3d import st3d
 import os
 
