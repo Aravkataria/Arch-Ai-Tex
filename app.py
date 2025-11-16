@@ -15,7 +15,7 @@ import requests
 import time
 import subprocess
 from streamlit_3d import streamlit_3d
-from streamlit_3d import stl_renderer
+from streamlit_3d import stl_plot
 import os
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
