@@ -1,39 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8" />
-    <title>3D Viewer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
+<meta charset="utf-8" />
+<title>3D Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body style="margin:0; overflow:hidden;">
-    <div id="viewer" style="width:100vw; height:100vh;"></div>
+<div id="viewer" style="width:100vw; height:100vh;"></div>
 
-    <script>
-        const container = document.getElementById("viewer");
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias:true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        container.appendChild(renderer.domElement);
+<script>
+const container = document.getElementById("viewer");
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+container.appendChild(renderer.domElement);
 
-        const light = new THREE.AmbientLight(0xffffff, 1);
-        scene.add(light);
+const light = new THREE.AmbientLight(0xffffff, 1);
+scene.add(light);
 
-        const loader = new THREE.GLTFLoader();
-        const urlParams = new URLSearchParams(window.location.search);
-        const file = urlParams.get("file");
+const loader = new THREE.GLTFLoader();
 
-        loader.load(file, function(gltf) {
-            scene.add(gltf.scene);
-            camera.position.z = 5;
+fetch("/generate", { method:"POST" })
+.then(r => r.json())
+.then(data => {
+    const glbData = data.glb;
+    const arrayBuffer = new TextEncoder().encode(glbData).buffer;
+    const blob = new Blob([arrayBuffer], { type: "model/gltf-binary" });
+    const url = URL.createObjectURL(blob);
 
-            function animate() {
-                requestAnimationFrame(animate);
-                renderer.render(scene, camera);
-            }
-            animate();
-        });
-    </script>
+    loader.load(url, function(gltf) {
+        scene.add(gltf.scene);
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+    });
+
+    window.plyDownload = data.ply_download;
+    window.glbDownload = data.glb_download;
+});
+</script>
 </body>
 </html>
