@@ -1,4 +1,3 @@
-# Core dependencies
 streamlit==1.39.0
 numpy==1.26.4
 pandas==2.2.3
@@ -7,22 +6,18 @@ joblib==1.4.2
 matplotlib==3.9.2
 scikit-learn==1.5.2
 
-# Torch (CPU-only)
 torch
 torchvision
 torchaudio
 
-# OpenCV (headless for servers)
 opencv-python-headless
 
-# Hugging Face Transformers + Required Libraries
 diffusers
 transformers==4.45.0
 sentencepiece
 protobuf
 
-# 3D Model Viewing
-streamlit-3d
-
 fastapi
 uvicorn
+
+streamlit-3d==0.1.12
