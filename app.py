@@ -225,7 +225,7 @@ with col2:
 st.markdown("---")
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "ChatBot"],
     horizontal=True
 )
 
