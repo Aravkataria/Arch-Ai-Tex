@@ -492,7 +492,7 @@ elif mode == "Optimized Layout":
 elif mode == "ChatBot":
     st.header("💬 AEC / BIM Chatbot")
 
-    api_key = st.secrets.get("GROQ_API_KEY", None)
+    api_key = st.secrets.get("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", None)
     if not api_key:
         st.error("GROQ_API_KEY not found in Streamlit secrets. Add it in app settings.")
     else:
