@@ -1,4 +1,3 @@
-# app.py (fixed full code)
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -19,9 +18,6 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-# -------------------------
-# Constants & Model classes
-# -------------------------
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
@@ -540,4 +536,4 @@ elif mode == "ChatBot":
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
             st.chat_message("assistant").write(answer)
 
-# End of file
+# https://esp32-fastapi-server-uh47.onrender.com/data
