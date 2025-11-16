@@ -442,48 +442,83 @@ elif mode == "Real-Time Sensor Dashboard":
 
         # Show reset options once both values are set
 
-elif mode == "chatbot":
-import streamlit as st
-import requests
+else:
+    colA, colB = st.columns(2)
+    with colA:
+        total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
+    with colB:
+        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
+    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
+    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
+    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+    colW, colH = st.columns(2)
+    with colW:
+        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+    with colH:
+        plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
+    if st.button("Generate Optimized Layout"):
+        with st.spinner("Generating layout..."):
+            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
+            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
+            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
+            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
+            st.pyplot(fig)
 
-# ---- CHATBOT SECTION ----
-st.subheader("💬 AEC / BIM Chatbot")
+else:
+# === CHATBOT MODE ===
+elif mode == "ChatBot":
+    st.header("💬 AEC / BIM Chatbot")
 
-api_key = st.secrets["GROQ_API_KEY"]
+    # Make sure you set this secret in Streamlit Cloud: GROQ_API_KEY
+    api_key = st.secrets.get("GROQ_API_KEY", None)
+    if not api_key:
+        st.error("GROQ_API_KEY not found in Streamlit secrets. Add it in app settings.")
+    else:
+        def ask_groq(messages):
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            data = {
+                "model": "llama-3.1-8b-instant",
+                "messages": messages,
+                "temperature": 0.2,
+            }
+            try:
+                resp = requests.post(url, json=data, headers=headers, timeout=30)
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                return f"Error calling LLM API: {e}"
 
-def ask_groq(messages):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        # Init chat history with a system prompt tuned to BIM/AEC
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": (
+                    "You are an expert AEC/BIM architect and engineer. "
+                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
+                )}
+            ]
 
-    data = {
-        "model": "llama-3.1-8b-instant",
-        "messages": messages,
-        "temperature": 0.2
-    }
+        # Render existing chat messages
+        for msg in st.session_state.chat_history[1:]:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
-    response = requests.post(url, json=data, headers=headers)
-    return response.json()["choices"][0]["message"]["content"]
+        # Input box
+        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
 
-# Store chat history
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [
-        {"role": "system", "content": "You are an AEC/BIM expert assistant."}
-    ]
+        if user_input:
+            # append user message and display it
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.chat_message("user").write(user_input)
 
-# Chat input
-prompt = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
+            # call model with entire conversation (system + history)
+            answer = ask_groq(st.session_state.chat_history)
 
-# Run chatbot
-if prompt:
-    st.session_state.chat_history.append({"role": "user", "content": prompt})
-    answer = ask_groq(st.session_state.chat_history)
-    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            # append and display assistant reply
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            st.chat_message("assistant").write(answer)
 
-# Display messages
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
+# === OPTIMIZED LAYOUT MODE (keeps your original else logic) ===
 else:
     colA, colB = st.columns(2)
     with colA:
