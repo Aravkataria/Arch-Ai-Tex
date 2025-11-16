@@ -492,9 +492,9 @@ elif mode == "Optimized Layout":
 elif mode == "ChatBot":
     st.header("💬 AEC / BIM Chatbot")
 
-    api_key = st.secrets.get("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", None)
+    api_key = st.secrets.get("Arch-Ai-Tex Chatbot", None)
     if not api_key:
-        st.error("GROQ_API_KEY not found in Streamlit secrets. Add it in app settings.")
+        st.error("Arch-Ai-Tex Chatbot not found in Streamlit secrets. Add it in app settings.")
     else:
         def ask_groq(messages):
             url = "https://api.groq.com/openai/v1/chat/completions"
