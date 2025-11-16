@@ -1,3 +1,4 @@
+# app.py (fixed full code)
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -18,6 +19,9 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
+# -------------------------
+# Constants & Model classes
+# -------------------------
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
@@ -47,7 +51,9 @@ class DCGAN_Generator(nn.Module):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
-
+# -------------------------
+# Load models
+# -------------------------
 @st.cache_resource
 def load_models():
     rf_model = None
@@ -75,6 +81,9 @@ def load_models():
 
 RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
+# -------------------------
+# Utility functions
+# -------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Unknown Type (RF model missing)"
@@ -90,7 +99,6 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
     if area < 100:
         area = 100
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
-    seed_base = int(area * 10 + bedrooms * 1234)
     for i in range(count):
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
         with torch.no_grad():
@@ -191,6 +199,9 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     ax.set_title(title)
     return fig
 
+# -------------------------
+# Styling & Header
+# -------------------------
 st.markdown("""
 <style>
 .stButton>button {
@@ -223,13 +234,19 @@ with col2:
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
+
+# -------------------------
+# Main mode selector
+# -------------------------
 mode = st.radio(
     "Select Mode:",
     ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "ChatBot"],
     horizontal=True
 )
 
-
+# -------------------------
+# Mode: GAN Generator
+# -------------------------
 if mode == "GAN Generator":
     col_len, col_wid = st.columns(2)
     with col_len:
@@ -265,6 +282,10 @@ if mode == "GAN Generator":
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
                 )
+
+# -------------------------
+# Mode: Real-Time Sensor Dashboard
+# -------------------------
 elif mode == "Real-Time Sensor Dashboard":
     st.header("Cloud Sensor Dashboard")
     st.markdown("Fetch ultrasonic readings one at a time and confirm whether it’s **Length** or **Breadth**.")
@@ -440,9 +461,10 @@ elif mode == "Real-Time Sensor Dashboard":
                         mime="image/png",
                     )
 
-        # Show reset options once both values are set
-
-else:
+# -------------------------
+# Mode: Optimized Layout
+# -------------------------
+elif mode == "Optimized Layout":
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
@@ -464,12 +486,12 @@ else:
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-else:
-# === CHATBOT MODE ===
+# -------------------------
+# Mode: ChatBot (integrated)
+# -------------------------
 elif mode == "ChatBot":
     st.header("💬 AEC / BIM Chatbot")
 
-    # Make sure you set this secret in Streamlit Cloud: GROQ_API_KEY
     api_key = st.secrets.get("GROQ_API_KEY", None)
     if not api_key:
         st.error("GROQ_API_KEY not found in Streamlit secrets. Add it in app settings.")
@@ -498,12 +520,12 @@ elif mode == "ChatBot":
                 )}
             ]
 
-        # Render existing chat messages
+        # Render existing chat messages (skip system message)
         for msg in st.session_state.chat_history[1:]:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-        # Input box
+        # Chat input
         user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
 
         if user_input:
@@ -511,32 +533,11 @@ elif mode == "ChatBot":
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             st.chat_message("user").write(user_input)
 
-            # call model with entire conversation (system + history)
+            # call model with full conversation
             answer = ask_groq(st.session_state.chat_history)
 
             # append and display assistant reply
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
             st.chat_message("assistant").write(answer)
 
-# === OPTIMIZED LAYOUT MODE (keeps your original else logic) ===
-else:
-    colA, colB = st.columns(2)
-    with colA:
-        total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
-    with colB:
-        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
-    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
-    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
-    colW, colH = st.columns(2)
-    with colW:
-        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
-    with colH:
-        plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-    if st.button("Generate Optimized Layout"):
-        with st.spinner("Generating layout..."):
-            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
-            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
-            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
-            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
-            st.pyplot(fig)
+# End of file
