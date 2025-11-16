@@ -490,193 +490,181 @@ elif mode == "Optimized Layout":
 # Mode: ChatBot (integrated)
 # -------------------------
 # -------------------------
-# Mode: ChatBot (Glassmorphism + Modern UI)
+# Mode: ChatBot (Ultra-clean Glassmorphism UI)
 # -------------------------
 elif mode == "ChatBot":
-    st.markdown(
-        """
+
+    # Inject modern UI CSS
+    st.markdown("""
         <style>
-        /* Main chat container */
-        .chat-container {
-            background: rgba(255, 255, 255, 0.10);
-            backdrop-filter: blur(15px);
-            border-radius: 20px;
-            padding: 25px;
+
+        /* MAIN CHAT WRAPPER */
+        .chat-wrapper {
+            padding: 20px;
+            background: rgba(255,255,255,0.10);
+            backdrop-filter: blur(20px);
+            border-radius: 22px;
             margin-top: 20px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.10);
         }
 
-        /* Individual message bubbles */
+        /* BUBBLES */
         .bubble {
-            padding: 15px 18px;
-            border-radius: 16px;
-            margin: 10px 0;
+            padding: 14px 18px;
+            border-radius: 18px;
+            margin: 12px 0;
             max-width: 80%;
-            animation: fadeIn 0.4s ease;
+            line-height: 1.5;
+            font-size: 15px;
+            animation: fadeIn 0.35s ease-out;
         }
 
-        .user-bubble {
-            background: rgba(0, 122, 255, 0.35);
-            color: white;
+        .user {
             margin-left: auto;
+            background: rgba(0,122,255,0.55);
+            color: white;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.25);
         }
 
-        .assistant-bubble {
-            background: rgba(255,255,255,0.25);
-            border: 1px solid rgba(255,255,255,0.15);
-            color: #000;
+        .assistant {
             margin-right: auto;
+            background: rgba(255,255,255,0.35);
+            color: #000;
+            border: 1px solid rgba(255,255,255,0.20);
             backdrop-filter: blur(10px);
         }
 
-        /* Typing indicator */
-        .typing {
-            width: 60px;
-            height: 18px;
-            background: rgba(255,255,255,0.25);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            padding: 0 10px;
-            margin: 10px 0;
-        }
-
-        .dot {
-            width: 6px;
-            height: 6px;
-            background: white;
-            border-radius: 50%;
-            animation: blink 1.4s infinite both;
-        }
-
-        .dot:nth-child(2) { animation-delay: 0.2s; }
-        .dot:nth-child(3) { animation-delay: 0.4s; }
-
-        @keyframes blink {
-            0% { opacity: 0.2; transform: translateY(0); }
-            50% { opacity: 1; transform: translateY(-3px); }
-            100% { opacity: 0.2; transform: translateY(0); }
-        }
-
+        /* MESSAGE FADE-IN */
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to   { opacity: 1; transform: translateY(0); }
+            0% { opacity: 0; transform: translateY(6px); }
+            100% { opacity: 1; transform: translateY(0px); }
         }
 
-        /* Floating input bar */
+        /* INPUT BAR */
         .stChatInputContainer {
-            background: rgba(255,255,255,0.35) !important;
-            backdrop-filter: blur(10px);
-            padding: 12px !important;
-            border-radius: 20px !important;
-            border: 1px solid rgba(255,255,255,0.3);
-            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+            background: rgba(255,255,255,0.40) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
+            border-radius: 18px !important;
+            padding: 14px !important;
+            margin-top: 15px !important;
         }
 
         .stTextInput>div>div>input {
-            border-radius: 12px !important;
             font-size: 15px !important;
+            padding: 10px 12px !important;
+            border-radius: 10px !important;
         }
+
+        /* TYPING INDICATOR */
+        .typing {
+            width: 50px;
+            background: rgba(255,255,255,0.35);
+            border-radius: 15px;
+            padding: 6px 12px;
+            display: flex;
+            gap: 5px;
+            margin: 10px 0;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 50%;
+            animation: blink 1.4s infinite both;
+        }
+        .dot:nth-child(2) { animation-delay: .15s; }
+        .dot:nth-child(3) { animation-delay: .3s; }
+
+        @keyframes blink {
+            0% {opacity: 0.3; transform: translateY(0);}
+            50% {opacity: 1; transform: translateY(-3px);}
+            100% {opacity: 0.3; transform: translateY(0);}
+        }
+
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
-    st.subheader("💬 Arch-Ai-Tex Glass AI — AEC/BIM Assistant")
+    st.subheader("💬 Arch-Ai-Tex — Modern Glass ChatBot")
 
-    # Load API key
-    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
+    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT", None)
     if not api_key:
-        st.error("API key missing — please add ARCH_AI_TEX_CHATBOT in Streamlit secrets.")
+        st.error("API key missing. Add ARCH_AI_TEX_CHATBOT to your Streamlit secrets.")
         st.stop()
 
+    # API caller
     def ask_groq(messages):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        data = {
-            "model": "llama-3.1-8b-instant",
-            "messages": messages,
-            "temperature": 0.2,
-        }
+        data = {"model": "llama-3.1-8b-instant", "messages": messages, "temperature": 0.2}
+
         try:
             resp = requests.post(url, json=data, headers=headers, timeout=30)
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
         except Exception as e:
-            return f"Error calling LLM API: {e}"
+            return f"Error calling API: {e}"
 
-    # Initialize chat history
+    # Session history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [
             {"role": "system", "content": (
-                "You are Arch-Ai-Tex Glass Assistant — a premium AEC/BIM AI. "
-                "You speak clearly, professionally, and visually."
+                "You are a professional architect & BIM consultant. "
+                "Keep responses clear and helpful."
             )}
         ]
 
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    # Chat wrapper
+    st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
 
-    # Render chat messages (UI bubbles)
+    # Display full history
     for msg in st.session_state.chat_history[1:]:
         role = msg["role"]
-        bubble_class = "user-bubble" if role == "user" else "assistant-bubble"
-
+        bubble_class = "user" if role == "user" else "assistant"
         st.markdown(
-            f"""
-            <div class="bubble {bubble_class}">
-                {msg['content']}
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f'<div class="bubble {bubble_class}">{msg["content"]}</div>',
+            unsafe_allow_html=True
         )
 
-    # User input
-    user_input = st.chat_input("Ask your architectural or BIM question...")
+    # Input
+    user_input = st.chat_input("Ask anything…")
 
     if user_input:
-        # Store + show user message
+        # Save user message
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
         st.markdown(
-            f"""
-            <div class="bubble user-bubble">
-                {user_input}
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f'<div class="bubble user">{user_input}</div>',
+            unsafe_allow_html=True
         )
 
-        # Typing indicator
-        typing_html = """
-        <div class="typing">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-        </div>
-        """
-        typing_box = st.markdown(typing_html, unsafe_allow_html=True)
+        # Typing animation
+        typing_placeholder = st.markdown(
+            """
+            <div class="typing">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            """, unsafe_allow_html=True
+        )
 
-        # Call Groq AI
+        # API RESPONSE
         answer = ask_groq(st.session_state.chat_history)
 
-        # Remove typing animation
-        typing_box.empty()
+        typing_placeholder.empty()
 
-        # Append + display assistant response
+        # Save AI response
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
         st.markdown(
-            f"""
-            <div class="bubble assistant-bubble">
-                {answer}
-            </div>
-            """,
-            unsafe_allow_html=True,
+            f'<div class="bubble assistant">{answer}</div>',
+            unsafe_allow_html=True
         )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # End of file
