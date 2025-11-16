@@ -13,9 +13,44 @@ import warnings
 from PIL import Image
 import requests
 import time
+import struct
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
-
+def floorplan_to_glb(img, wall_height=0.3, scale=0.01):
+    arr = np.array(img.convert("L"))
+    h, w = arr.shape
+    vertices = []
+    normals = []
+    uvs = []
+    indices = []
+    for y in range(h - 1):
+        for x in range(w - 1):
+            v = arr[y, x] / 255
+            z = v * wall_height
+            i = len(vertices)
+            vertices.extend([
+                x * scale, y * scale, 0,
+                (x+1)*scale, y*scale, 0,
+                x*scale, (y+1)*scale, 0,
+                (x+1)*scale, (y+1)*scale, 0,
+                x*scale, y*scale, z,
+                (x+1)*scale, y*scale, z,
+                x*scale, (y+1)*scale, z,
+                (x+1)*scale, (y+1)*scale, z
+            ])
+            face = [
+                i, i+1, i+2, i+1, i+3, i+2,
+                i+4, i+6, i+5, i+5, i+6, i+7,
+                i, i+2, i+4, i+2, i+6, i+4,
+                i+1, i+5, i+3, i+3, i+5, i+7,
+                i+2, i+3, i+6, i+3, i+7, i+6,
+                i, i+4, i+1, i+1, i+4, i+5
+            ]
+            indices.extend(face)
+    bin_data = struct.pack("<%sf" % len(vertices), *vertices) + struct.pack("<%sI" % len(indices), *indices)
+    glb = b'glTF' + struct.pack("<I", 2) + struct.pack("<I", len(bin_data)+28) + bin_data
+    return glb
+    
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
 DEVICE = torch.device("cpu")
@@ -313,6 +348,13 @@ if mode == "GAN Generator":
                 
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                glb_data = floorplan_to_glb(img)
+                col.download_button(
+                    label=f"Download 3D Model {i+1} (.glb)",
+                    data=glb_data,
+                    file_name=f"plan_{i+1}.glb",
+                    mime="model/gltf-binary"
+                )
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
