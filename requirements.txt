@@ -21,7 +21,3 @@ fastapi
 uvicorn
 
 streamlit-3d==0.1.12
-
-llama-cpp-python
-sentence-transformers
-faiss-cpu
