@@ -442,6 +442,47 @@ elif mode == "Real-Time Sensor Dashboard":
 
         # Show reset options once both values are set
 
+elif mode == "chatbot":
+import streamlit as st
+import requests
+
+# ---- CHATBOT SECTION ----
+st.subheader("💬 AEC / BIM Chatbot")
+
+api_key = st.secrets["GROQ_API_KEY"]
+
+def ask_groq(messages):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    data = {
+        "model": "llama-3.1-8b-instant",
+        "messages": messages,
+        "temperature": 0.2
+    }
+
+    response = requests.post(url, json=data, headers=headers)
+    return response.json()["choices"][0]["message"]["content"]
+
+# Store chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        {"role": "system", "content": "You are an AEC/BIM expert assistant."}
+    ]
+
+# Chat input
+prompt = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
+
+# Run chatbot
+if prompt:
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
+    answer = ask_groq(st.session_state.chat_history)
+    st.session_state.chat_history.append({"role": "assistant", "content": answer})
+
+# Display messages
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
 else:
     colA, colB = st.columns(2)
