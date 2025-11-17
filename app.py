@@ -482,123 +482,150 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
             
-# ------------------ FLOATING CHATBOT BACKEND ------------------
+# ------------------ ROBUST FLOATING CHATBOT (LEFT-CORNER) ------------------
+# Place this at the very end of your script (replace previous floating widget code).
 
-import streamlit as st
-
-# Session state to store chat inside widget
+# Ensure session keys exist
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
 if "floating_chat_history" not in st.session_state:
     st.session_state.floating_chat_history = []
 
-def floating_chatbot():
-    user_msg = st.text_input("Ask something...", key="floating_chat_input")
+# Toggle callback
+def toggle_chat():
+    st.session_state.chat_open = not st.session_state.chat_open
 
-    if st.button("Send", key="floating_chat_send"):
-        if user_msg.strip() != "":
-            # Add user message
-            st.session_state.floating_chat_history.append(("user", user_msg))
+# CSS to make the Streamlit button look & sit like a floating icon (left-bottom)
+st.markdown(
+    """
+    <style>
+    /* Position the container that will hold the Streamlit button */
+    .floating-button-area {
+        position: fixed;
+        left: 18px;
+        bottom: 20px;
+        z-index: 2000;
+    }
 
-            # --------------------------
-            # 🔥 Replace this with your real Groq chatbot response
-            bot_reply = f"You said: {user_msg}"
-            # --------------------------
+    /* Style the streamlit button inside this area to look circular */
+    .floating-button-area .stButton>button {
+        width: 65px;
+        height: 65px;
+        padding: 0;
+        border-radius: 50%;
+        background-color: #4CAF50;
+        color: white;
+        font-size: 26px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+        border: none;
+    }
+    .floating-button-area .stButton>button:hover {
+        transform: scale(1.05);
+        background-color: #45a049;
+    }
 
-            # Add bot reply
-            st.session_state.floating_chat_history.append(("bot", bot_reply))
+    /* Chat panel - absolute left */
+    .chat-panel {
+        position: fixed;
+        left: 18px;
+        bottom: 100px;
+        width: 360px;
+        height: 520px;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+        z-index: 2000;
+        padding: 10px 14px;
+        overflow-y: auto;
+    }
 
-    # Render chat visually
+    .chat-panel .close-btn {
+        position: absolute;
+        right: 12px;
+        top: 10px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    /* Simple chat bubble styles */
+    .chat-user {
+        background: #d0f0ff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        margin: 8px 0;
+        width: 85%;
+    }
+    .chat-bot {
+        background: #fff3cd;
+        padding: 8px 12px;
+        border-radius: 10px;
+        margin: 8px 0;
+        width: 85%;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# small layout: the button must be rendered in a container so CSS targets it
+button_placeholder = st.empty()
+with button_placeholder.container():
+    st.markdown('<div class="floating-button-area">', unsafe_allow_html=True)
+    # Render the toggle button. This button is reliably clickable (Streamlit-managed).
+    if st.button("💬", key="toggle_chat_button", on_click=toggle_chat):
+        # callback toggles session_state; nothing else required here
+        pass
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# Chat panel rendering controlled by session_state
+if st.session_state.chat_open:
+    # Render the panel (no JS needed)
+    st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
+
+    # Close button (just a normal Streamlit button aligned visually)
+    col1, col2 = st.columns([0.8, 0.2])
+    with col2:
+        if st.button("✖ Close", key="close_chat_button"):
+            st.session_state.chat_open = False
+            # force a small rerun to hide panel immediately
+            st.experimental_rerun()
+
+    st.markdown("<h4 style='margin-top:0;'>Arch-Ai-Tex ChatBot</h4>", unsafe_allow_html=True)
+
+    # --- Chat history display ---
     for role, text in st.session_state.floating_chat_history:
         if role == "user":
-            st.markdown(
-                f"""
-                <div style="background:#d0f0ff; padding:8px 12px;
-                            margin:6px; border-radius:8px; width:90%;">
-                    <b>You:</b> {text}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='chat-user'><b>You:</b> {text}</div>", unsafe_allow_html=True)
         else:
-            st.markdown(
-                f"""
-                <div style="background:#fff3cd; padding:8px 12px;
-                            margin:6px; border-radius:8px; width:90%;">
-                    {text}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div class='chat-bot'><b>Bot:</b> {text}</div>", unsafe_allow_html=True)
 
-# ------------------ FLOATING CHATBOT WIDGET ------------------
+    st.markdown("<hr/>", unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-/* Floating Button on Left */
-#chat-launcher {
-    position: fixed;
-    left: 18px;
-    bottom: 20px;
-    width: 65px;
-    height: 65px;
-    background-color: #4CAF50;
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 32px;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    z-index: 9999;
-}
+    # --- Input area ---
+    user_input = st.text_input("Type your question...", key="floating_chat_input")
+    send_col, spacer = st.columns([0.3, 0.7])
+    with send_col:
+        if st.button("Send", key="floating_chat_send"):
+            if user_input and user_input.strip() != "":
+                # append user
+                st.session_state.floating_chat_history.append(("user", user_input))
 
-/* Chat window */
-#chat-box {
-    position: fixed;
-    left: 18px;
-    bottom: 100px;
-    width: 350px;
-    height: 500px;
-    background: white;
-    padding: 12px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    display: none;
-    overflow-y: auto;
-    z-index: 99999;
-}
+                # --- CALL YOUR ACTUAL LLM / GROQ HERE ---
+                # Replace the mock reply below with your real function call (ask_groq)
+                # Example:
+                # reply = ask_groq(st.session_state.some_history_structure)
+                # For now we return a placeholder to verify the flow:
+                reply = f"(placeholder reply) I received: {user_input}"
 
-/* Close Button */
-#chat-close {
-    position: absolute;
-    right: 12px;
-    top: 10px;
-    font-size: 20px;
-    cursor: pointer;
-}
-</style>
+                # append bot reply
+                st.session_state.floating_chat_history.append(("bot", reply))
 
-<div id="chat-launcher" onclick="openChat()">💬</div>
+                # clear input (works by setting session key)
+                st.session_state.floating_chat_input = ""
 
-<div id="chat-box">
-    <div id="chat-close" onclick="closeChat()">✖</div>
-    <h4>ChatBot</h4>
-    <div id="chat-widget-container"></div>
-</div>
+                # rerun so UI updates and scroll appears updated
+                st.experimental_rerun()
 
-<script>
-function openChat() {
-    document.getElementById("chat-box").style.display = "block";
-}
-function closeChat() {
-    document.getElementById("chat-box").style.display = "none";
-}
-</script>
-""", unsafe_allow_html=True)
-
-# Render chatbot content
-with st.container():
-    floating_chatbot()
-
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
