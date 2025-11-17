@@ -17,7 +17,21 @@ import time
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
+st.markdown("""
+<style>
+/* Increase total page width */
+.block-container {
+    padding-left: 2.5rem !important;
+    padding-right: 2.5rem !important;
+    max-width: 1800px !important;
+}
 
+/* Control chatbot width */
+#chatbot-column {
+    width: 420px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 # -------------------------
 # Constants & Model classes (unchanged)
 # -------------------------
@@ -228,7 +242,7 @@ st.markdown("""
 # --- LAYOUT CHANGE: Use 2 columns for the main layout ---
 # col_chatbot: Narrow column on the left (ratio 1)
 # col_main_app: Wider column for the rest of the application (ratio 4)
-col_chatbot, col_main_app = st.columns([1, 4])
+col_chatbot, col_main_app = st.columns([1.6, 4.4])
 
 
 # -------------------------
