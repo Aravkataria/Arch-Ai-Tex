@@ -16,16 +16,29 @@ import time
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
-st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 st.markdown("""
 <style>
+/* Main app width */
 .block-container {
     max-width: 1000px !important;
-    margin-left: auto;
-    margin-right: auto;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* ADD SPACING between Chatbot and main UI components */
+#chatbot-container {
+    margin-top: 40px !important;      /* space ABOVE chatbot */
+    padding-top: 20px !important;     /* internal padding */
+    border-top: 2px solid #e0e0e0;    /* subtle separator line */
+}
+
+/* Optional: more breathing room between sections */
+section[data-testid="stVerticalBlock"] {
+    margin-bottom: 25px;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # -------------------------
 # Constants & Model classes (unchanged)
