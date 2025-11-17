@@ -19,19 +19,15 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 st.markdown("""
 <style>
-/* Increase total page width */
+/* Increase entire app width */
 .block-container {
-    padding-left: 2.5rem !important;
-    padding-right: 2.5rem !important;
-    max-width: 1800px !important;
-}
-
-/* Control chatbot width */
-#chatbot-column {
-    width: 420px !important;
+    max-width: 1800px !important;   /* Increase main UI width */
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
 # -------------------------
 # Constants & Model classes (unchanged)
 # -------------------------
