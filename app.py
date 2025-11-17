@@ -194,7 +194,8 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
         # safe f-string: do not include problematic unicode directly
-        label_text = f"{r['name']}\n{r['area']} m^2"
+        label_text = f"{r['name']}
+{r['area']} m^2"
         ax.text(x + w / 2, y + h / 2, label_text, ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
@@ -402,6 +403,10 @@ if mode == "GAN Generator":
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
         st.markdown("Generated Floorplans:")
         cols = st.columns(3)
+        # container to hold generated 3D figures in session state
+        if 'gan_3d_figs' not in st.session_state:
+            st.session_state['gan_3d_figs'] = {}
+
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
@@ -417,8 +422,9 @@ if mode == "GAN Generator":
                     mime="image/png",
                 )
 
-                # 3D extrusion button
-                if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_gan_{i}"):
+                # 3D extrusion button -> when pressed, save fig to session_state and show below
+                btn_key = f"extrude_gan_{i}"
+                if col.button(f"Show 3D Extrusion {i+1}", key=btn_key):
                     # pixel_area is area per pixel in m^2 -> meters per pixel side
                     m_per_pixel = math.sqrt(pixel_area)
                     img_w_px, img_h_px = img.size
@@ -427,9 +433,22 @@ if mode == "GAN Generator":
                     prisms = segmentation_to_prisms(seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height)
                     if prisms:
                         fig3d = plot_layout_3d(prisms, img_display_w, img_display_h, title=f"Plan {i+1} 3D")
-                        col.plotly_chart(fig3d, use_container_width=True)
+                        # store plotly figure JSON to session state so it survives rerun
+                        st.session_state['gan_3d_figs'][btn_key] = fig3d.to_dict()
                     else:
-                        col.info("No sizable rooms found to extrude.")
+                        st.session_state['gan_3d_figs'].pop(btn_key, None)
+                        st.info("No sizable rooms found to extrude.")
+
+        # After the columns, display any saved 3D figures for GAN plans
+        if st.session_state.get('gan_3d_figs'):
+            st.markdown("### 3D Extrusions (GAN)")
+            for key, fig_dict in st.session_state['gan_3d_figs'].items():
+                try:
+                    fig = go.Figure(fig_dict)
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception:
+                    # if fig restoration fails, remove it
+                    st.session_state['gan_3d_figs'].pop(key, None)
 
 # -------------------------
 # Mode: Real-Time Sensor Dashboard
