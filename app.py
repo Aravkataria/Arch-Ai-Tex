@@ -239,7 +239,7 @@ st.markdown("---")
 # -------------------------
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "ChatBot"],
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
     horizontal=True
 )
 
@@ -492,7 +492,7 @@ elif mode == "Optimized Layout":
 # -------------------------
 # Permanent Sidebar ChatBot
 # -------------------------
-st.sidebar.header("Architecture / Design Chatbot")
+st.sidebar.header("Arch-Ai-Tex Chatbot")
 
 api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
 if not api_key:
