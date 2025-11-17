@@ -26,25 +26,24 @@ st.markdown("""
     margin-right: auto !important;
 }
 
-/* GAP + SEPARATOR between Chatbot and Main App */
+/* 3D Embossed Separator Between Chatbot & Main App */
 div[data-testid="column"]:first-child {        /* Chatbot column */
-    border-right: 2px solid #dcdcdc !important;  /* vertical separator */
-    padding-right: 20px !important;              /* spacing inside */
+    border-right: 1px solid #ffffff !important;   /* highlight edge */
+    box-shadow: inset -2px 0px 4px rgba(0,0,0,0.18); /* inner shadow for embossed effect */
+    padding-right: 22px !important;
 }
 
-div[data-testid="column"]:nth-child(2) {        /* Main generator column */
-    padding-left: 35px !important;              /* gap from separator */
+div[data-testid="column"]:nth-child(2) {        /* Main content column */
+    padding-left: 35px !important;
 }
 
-/* Optional: more breathing room between sections */
+/* Optional: smoother section spacing */
 section[data-testid="stVerticalBlock"] {
     margin-bottom: 25px;
 }
 
 </style>
 """, unsafe_allow_html=True)
-
-
 
 # -------------------------
 # Constants & Model classes (unchanged)
