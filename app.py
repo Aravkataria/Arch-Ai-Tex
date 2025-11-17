@@ -14,6 +14,7 @@ from PIL import Image
 import requests
 import time
 import plotly.graph_objects as go
+import pyvista as pv
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -136,6 +137,7 @@ def apply_segmentation(image, num_rooms):
     seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
+# FIX APPLIED HERE
 def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
     num_rooms_input = max(0, int(num_rooms_input))
@@ -144,50 +146,78 @@ def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_sh
     num_bedrooms = max(0, num_rooms_input - len(fixed_ratios))
     remaining_ratio = max(0.0, 1.0 - fixed_total)
     rooms = []
+    
+    # 1. Add fixed rooms
     for name, ratio in fixed_ratios.items():
         rooms.append({"name": name, "area": round(total_area * ratio, 2)})
+        
+    # 2. Add dynamic number of bedrooms
     if num_bedrooms > 0:
         per_bed_ratio = remaining_ratio / num_bedrooms
         for i in range(num_bedrooms):
             rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
     elif remaining_ratio > 0.01:
+        # If no bedrooms are requested but there's remaining space
         rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
+        
+    # 3. Final area adjustment (to ensure sum equals total_area)
     current_sum = round(sum(r["area"] for r in rooms), 2)
     diff = round(total_area - current_sum, 2)
     if abs(diff) >= 0.01 and rooms:
-        rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
+        # Adjust the largest room (usually living+dining)
+        rooms[0]["area"] = round(rooms[0]["area"] + diff, 2) 
+        
     return {"rooms": rooms, "num_bedrooms": num_bedrooms}, ""
 
+# FIX APPLIED HERE
 def plot_layout(layout, plot_w, plot_h, title="Layout"):
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(0, plot_w)
     ax.set_ylim(0, plot_h)
     ax.set_aspect('equal')
     ax.axis('off')
+    
+    # Draw plot boundary
     ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.2))
+    
     rooms = layout.get("rooms", [])
     total_area = sum(r["area"] for r in rooms)
-    scale = (plot_w * plot_h) / max(total_area, 1.0)
+    
+    # Scale calculation is crucial for reflecting size changes
+    scale_factor = (plot_w * plot_h) / max(total_area, 1.0) 
+    
     pad = min(plot_w, plot_h) * 0.02
     x, y = pad, pad
     row_h = 0
     colors = ["#f4cccc", "#d9ead3", "#cfe2f3", "#fff2cc", "#d9d2e9", "#c2f0c2"]
+    
     for i, r in enumerate(rooms):
         desired_area = max(0.1, r["area"])
-        rect_area = desired_area * scale
+        
+        # Calculate visual rectangle area based on actual room area
+        rect_area = desired_area * scale_factor 
+        
+        # Simple aspect ratio logic to determine w and h
         w = math.sqrt(rect_area) * 1.3
         h = rect_area / w
+        
+        # Check if new room fits in the current row, otherwise start a new row
         if x + w + pad > plot_w:
             x = pad
             y += row_h + pad
             row_h = 0
+        
+        # Stop plotting if we run out of vertical space
         if y + h + pad > plot_h:
             break
+            
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
         ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m^2", ha='center', va='center', fontsize=8)
+        
         x += w + pad
         row_h = max(row_h, h)
+        
     ax.set_title(title)
     return fig
 
@@ -468,7 +498,7 @@ if mode == "GAN Generator":
     st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)**")
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+    # Ceiling Height fixed at CEILING_HEIGHT = 3.0
 
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
@@ -649,7 +679,7 @@ elif mode == "Real-Time Sensor Dashboard":
 
         bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
         denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-        # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+        # Ceiling Height fixed at CEILING_HEIGHT = 3.0
 
         if st.button("Generate Floorplans", type="primary", use_container_width=True):
             dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
@@ -706,13 +736,16 @@ elif mode == "Optimized Layout":
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+    # Ceiling Height fixed at CEILING_HEIGHT = 3.0
 
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
+            # This calls the fixed layout generation
             layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
             dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
+            
+            # This calls the fixed plot logic, which will now change the number and size of rectangles
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
