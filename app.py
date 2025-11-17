@@ -193,8 +193,8 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             break
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}\\n{r['area']} m²"
-{r['area']} m²", ha='center', va='center', fontsize=8)
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m^2"
+{r['area']} m^2", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
     ax.set_title(title)
@@ -295,7 +295,7 @@ def plot_layout_3d(prisms, plot_w, plot_h, title="3D Layout"):
         cx = p['x'] + p['w']/2
         cy = p['y'] + p['h']/2
         labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']}
-{p['area']} m²"], textposition="middle center", hoverinfo='skip'))
+{p['area']} m^2"], textposition="middle center", hoverinfo='skip'))
     fig = go.Figure(data=[mesh, plane] + labels)
     fig.update_layout(
         title=title,
@@ -388,7 +388,7 @@ if mode == "GAN Generator":
     if area_m2 < 100:
         area_m2 = 100
     area_sqft = area_m2 * 10.7639
-    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
+    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)**")
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
     ceiling_height = st.number_input("Ceiling Height (m)", min_value=2.0, value=3.0, step=0.1)
@@ -397,7 +397,7 @@ if mode == "GAN Generator":
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
         )
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
-        st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
+        st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
         st.markdown("Generated Floorplans:")
         cols = st.columns(3)
         for i, col in enumerate(cols):
@@ -577,7 +577,7 @@ elif mode == "Real-Time Sensor Dashboard":
         area_sqft = area_m2 * 10.7639
 
         st.write(f"**Final Dimensions:** {length_m:.2f} m × {breadth_m:.2f} m")
-        st.write(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)")
+        st.write(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)")
 
         bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
         denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
@@ -589,7 +589,7 @@ elif mode == "Real-Time Sensor Dashboard":
             )
 
             st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
-            st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
+            st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
             st.markdown("Generated Floorplans:")
 
             cols = st.columns(3)
