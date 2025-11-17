@@ -17,21 +17,6 @@ import time
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
-def generate_dummy_ply():
-    # This is only a placeholder so the download button works.
-    # Replace this with your actual 3D generation code.
-    ply_text = """ply
-format ascii 1.0
-element vertex 3
-property float x
-property float y
-property float z
-end_header
-0 0 0
-1 0 0
-0 1 0
-"""
-    return ply_text.encode()
 
 # -------------------------
 # Constants & Model classes
@@ -296,15 +281,6 @@ if mode == "GAN Generator":
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
                 )
-                ply_data = generate_dummy_ply()
-                col.download_button(
-                    label=f"Download 3D Object (.ply) for Plan {i+1}",
-                    data=ply_data,
-                    file_name=f"plan_{i+1}.ply",
-                    mime="application/octet-stream"
-                )
-
-
 
 # -------------------------
 # Mode: Real-Time Sensor Dashboard
@@ -477,22 +453,12 @@ elif mode == "Real-Time Sensor Dashboard":
                     img.save(buf, format="PNG")
                     col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                     col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
-                    # Corrected indentation for the PNG download button:
-                    col.download_button( 
+                    col.download_button(
                         label=f"Download Plan {i+1}",
                         data=buf.getvalue(),
                         file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                         mime="image/png",
                     )
-                    ply_data = generate_dummy_ply()
-                    # Corrected indentation for the PLY download button:
-                    col.download_button(
-                        label=f"Download 3D Object (.ply) for Plan {i+1}",
-                        data=ply_data,
-                        file_name=f"plan_{i+1}.ply",
-                        mime="application/octet-stream"
-                    )
-
 
 # -------------------------
 # Mode: Optimized Layout
