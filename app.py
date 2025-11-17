@@ -1,7 +1,8 @@
-# app.py — Arch-Ai-Tex (clean full rewrite)
 import streamlit as st
 import torch
 import torch.nn as nn
+import torchvision.transforms as T
+import torchvision.models.segmentation as models
 import joblib
 import numpy as np
 import io
@@ -15,22 +16,16 @@ import time
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
-# ----------------------------
-# Page config
-# ----------------------------
-st.set_page_config(page_title="Arch-Ai-Tex", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-# ----------------------------
-# Global constants
-# ----------------------------
+# -------------------------
+# Constants & Model classes
+# -------------------------
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
 
-# ----------------------------
-# Simple DCGAN-like Generator (small)
-# ----------------------------
 class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
@@ -40,7 +35,7 @@ class DCGAN_Generator(nn.Module):
             nn.ReLU(True)
         )
 
-    def __init__(self, latent_dim=LATENT_DIM, channels=CHANNELS):
+    def __init__(self, latent_dim=100, channels=1):
         super().__init__()
         self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
         self.gen = nn.Sequential(
@@ -55,19 +50,17 @@ class DCGAN_Generator(nn.Module):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
-# ----------------------------
-# Load models (generator + RF)
-# ----------------------------
+# -------------------------
+# Load models
+# -------------------------
 @st.cache_resource
 def load_models():
     rf_model = None
     generator = DCGAN_Generator().to(DEVICE)
-    # Try load RF (joblib)
     try:
         rf_model = joblib.load("room_predictor.joblib")
     except Exception:
         rf_model = None
-    # Try generator weights
     loaded = False
     for fname in ("generator_epoch100.pth", "generator_epoch_100.pth", "generator.pth"):
         try:
@@ -77,33 +70,34 @@ def load_models():
             break
         except FileNotFoundError:
             continue
-        except Exception:
+        except Exception as e:
+            st.warning(f"Error loading generator model {fname}: {e}")
             continue
     if not loaded:
-        # keep generator but warn user
-        st.warning("GAN generator weights not found — generator will produce random noise.")
+        st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
     generator.eval()
-    return rf_model, generator
+    return rf_model, generator, None
 
-RF_MODEL, GAN_MODEL = load_models()
+RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
-# ----------------------------
+# -------------------------
 # Utility functions
-# ----------------------------
+# -------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
-        return "Unknown (RF model missing)"
+        return "Unknown Type (RF model missing)"
     try:
         features = np.array([[float(area), int(bedrooms)]])
-        return str(rf_model.predict(features)[0])
+        return rf_model.predict(features)[0]
     except Exception:
         return "Prediction Failed"
 
-def generate_final_plans(generator, area, bedrooms, count=3, denoise=False):
+def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_model=None):
+    dwelling_type = predict_dwelling_type(area, bedrooms, rf_model)
+    images = []
     if area < 100:
         area = 100
     pixel_area = area / (IMG_SIZE * IMG_SIZE)
-    images = []
     for i in range(count):
         z = torch.randn(1, LATENT_DIM).to(DEVICE)
         with torch.no_grad():
@@ -119,32 +113,39 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False):
                     img_np = cv2.fastNlMeansDenoisingColored(img_np, None, h=10, hColor=10)
             mode = 'L' if CHANNELS == 1 else 'RGB'
             img = Image.fromarray(img_np, mode)
-            img = img.resize((IMG_SIZE, IMG_SIZE))
             images.append(img)
-    return images, pixel_area
+    return dwelling_type, images, pixel_area
 
-def apply_segmentation(image):
-    # Convert to grayscale and simple connected components coloring
-    img_cv = np.array(image.convert("L"))
+def apply_segmentation(image, num_rooms):
+    if image.mode != "L":
+        img_cv = np.array(image.convert("L"))
+    else:
+        img_cv = np.array(image)
     _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV)
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
     seg_rgb = np.zeros((*img_cv.shape, 3), dtype=np.uint8)
     room_colors = [
-        (255, 199, 107), (130, 202, 157), (174, 199, 232),
-        (255, 152, 150), (197, 176, 213), (255, 237, 111),
-        (188, 189, 34), (140, 86, 75),
+        (255, 199, 107),
+        (130, 202, 157),
+        (174, 199, 232),
+        (255, 152, 150),
+        (197, 176, 213),
+        (255, 237, 111),
+        (188, 189, 34),
+        (140, 86, 75),
     ]
     for i in range(1, num_labels):
         if stats[i, cv2.CC_STAT_AREA] < 50:
             continue
-        color = room_colors[(i - 1) % len(room_colors)]
+        color_index = (i - 1) % len(room_colors)
+        color = room_colors[color_index]
         seg_rgb[labels == i] = color
     seg_pil = Image.fromarray(seg_rgb).resize(image.size)
     return seg_pil
 
-def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_w, plot_h):
+def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h):
     total_area = float(total_area)
-    num_rooms_input = max(1, int(num_rooms_input))
+    num_rooms_input = max(0, int(num_rooms_input))
     fixed_ratios = {"living+dining": 0.28, "kitchen": 0.08, "bathroom": 0.06}
     fixed_total = sum(fixed_ratios.values())
     num_bedrooms = max(0, num_rooms_input - len(fixed_ratios))
@@ -153,17 +154,16 @@ def generate_semantic_layout(total_area, num_rooms_input, property_type, plot_w,
     for name, ratio in fixed_ratios.items():
         rooms.append({"name": name, "area": round(total_area * ratio, 2)})
     if num_bedrooms > 0:
-        per_bed_ratio = remaining_ratio / max(1, num_bedrooms)
+        per_bed_ratio = remaining_ratio / num_bedrooms
         for i in range(num_bedrooms):
             rooms.append({"name": f"bedroom_{i+1}", "area": round(total_area * per_bed_ratio, 2)})
-    else:
-        if remaining_ratio > 0.01:
-            rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
+    elif remaining_ratio > 0.01:
+        rooms.append({"name": "utility/other", "area": round(total_area * remaining_ratio, 2)})
     current_sum = round(sum(r["area"] for r in rooms), 2)
     diff = round(total_area - current_sum, 2)
     if abs(diff) >= 0.01 and rooms:
         rooms[0]["area"] = round(rooms[0]["area"] + diff, 2)
-    return {"rooms": rooms, "num_bedrooms": num_bedrooms}
+    return {"rooms": rooms, "num_bedrooms": num_bedrooms}, ""
 
 def plot_layout(layout, plot_w, plot_h, title="Layout"):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -171,10 +171,10 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     ax.set_ylim(0, plot_h)
     ax.set_aspect('equal')
     ax.axis('off')
-    ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.0))
+    ax.add_patch(plt.Rectangle((0, 0), plot_w, plot_h, fill=False, edgecolor='black', linewidth=1.2))
     rooms = layout.get("rooms", [])
-    total_area = sum(r["area"] for r in rooms) or 1.0
-    scale = (plot_w * plot_h) / total_area
+    total_area = sum(r["area"] for r in rooms)
+    scale = (plot_w * plot_h) / max(total_area, 1.0)
     pad = min(plot_w, plot_h) * 0.02
     x, y = pad, pad
     row_h = 0
@@ -182,7 +182,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     for i, r in enumerate(rooms):
         desired_area = max(0.1, r["area"])
         rect_area = desired_area * scale
-        w = math.sqrt(rect_area) * 1.1
+        w = math.sqrt(rect_area) * 1.3
         h = rect_area / w
         if x + w + pad > plot_w:
             x = pad
@@ -190,319 +190,354 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             row_h = 0
         if y + h + pad > plot_h:
             break
-        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=0.8)
+        rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
         ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
     ax.set_title(title)
-    plt.tight_layout()
     return fig
 
-# ----------------------------
-# Styles & Header
-# ----------------------------
+# -------------------------
+# Styling & Header
+# -------------------------
 st.markdown("""
 <style>
-/* App primary button style */
 .stButton>button {
-    background-color: #16a34a;
+    background-color: #4CAF50;
     color: white;
     border-radius: 8px;
-    padding: 10px 20px;
-    font-size: 1.0em;
+    padding: 10px 24px;
+    font-size: 1.05em;
+    transition: all 0.15s;
     border: none;
 }
-.stButton>button:hover { transform: translateY(-2px); filter: brightness(0.95); }
-.container-centered { max-width: 1100px; margin: 0 auto; }
+.stButton>button:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+}
+.stImage > img {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-col1, col2 = st.columns([0.85, 0.15])
+col1, col2 = st.columns([0.8, 0.2])
 with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    try:
-        st.image("QR.png", width=90)
-    except Exception:
-        pass
+    st.image("QR.png", width=110)
+    st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ----------------------------
-# Main Mode Selector
-# ----------------------------
-mode = st.radio("Select Mode:", ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"], horizontal=True)
+# -------------------------
+# Main mode selector
+# -------------------------
+mode = st.radio(
+    "Select Mode:",
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "ChatBot"],
+    horizontal=True
+)
 
-# ----------------------------
+# -------------------------
 # Mode: GAN Generator
-# ----------------------------
+# -------------------------
 if mode == "GAN Generator":
-    c1, c2 = st.columns(2)
-    with c1:
-        house_length = st.number_input("Enter House Length (m)", min_value=1.0, value=50.0, step=1.0)
-    with c2:
-        house_width = st.number_input("Enter House Width (m)", min_value=1.0, value=30.0, step=1.0)
-    area_m2 = max(100.0, house_length * house_width)
+    col_len, col_wid = st.columns(2)
+    with col_len:
+        house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
+    with col_wid:
+        house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
+    area_m2 = house_length * house_width
+    if area_m2 < 100:
+        area_m2 = 100
     area_sqft = area_m2 * 10.7639
-    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)")
+    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-    generate_count = st.slider("Number of Plans to Generate", 1, 6, 3)
-    if st.button("Generate Floorplans", use_container_width=True):
-        with st.spinner("Generating..."):
-            images, pixel_area = generate_final_plans(GAN_MODEL, area_m2, bedrooms, count=generate_count, denoise=denoise_option)
-        st.subheader(f"Generated {len(images)} Floorplans")
+    if st.button("Generate Floorplans", type="primary", use_container_width=True):
+        dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
+            GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+        )
+        st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
-        cols = st.columns(min(3, len(images)))
-        for i, img in enumerate(images):
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            cols[i % 3].image(img, caption=f"Plan {i+1}", use_column_width=True)
-            cols[i % 3].download_button(
-                label="Download PNG",
-                data=buf.getvalue(),
-                file_name=f"plan_{i+1}_area_{int(area_sqft)}sqm_beds_{bedrooms}.png",
-                mime="image/png"
-            )
+        st.markdown("Generated Floorplans:")
+        cols = st.columns(3)
+        for i, col in enumerate(cols):
+            if i < len(floor_plan_images):
+                img = floor_plan_images[i]
+                seg_img = apply_segmentation(img, bedrooms)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                col.image(img, caption=f"Plan {i+1}", use_column_width=True)
+                col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                col.download_button(
+                    label=f"Download Plan {i+1}",
+                    data=buf.getvalue(),
+                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                    mime="image/png",
+                )
 
-# ----------------------------
+# -------------------------
 # Mode: Real-Time Sensor Dashboard
-# ----------------------------
+# -------------------------
 elif mode == "Real-Time Sensor Dashboard":
     st.header("Cloud Sensor Dashboard")
-    st.markdown("Fetch ultrasonic readings and set Length / Breadth from sensor.")
+    st.markdown("Fetch ultrasonic readings one at a time and confirm whether it’s **Length** or **Breadth**.")
 
-    # initialize session keys
-    for k in ("length", "breadth", "last_distance", "pir", "ir", "last_set"):
-        if k not in st.session_state:
-            st.session_state[k] = None
+    # Initialize session states
+    for key in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
+        if key not in st.session_state:
+            st.session_state[key] = None
 
+    st.divider()
+
+    # --- CASE 1: Nothing yet — only show Get Sensor Data ---
     if st.session_state.length is None and st.session_state.breadth is None and st.session_state.last_distance is None:
-        if st.button("Get Sensor Data"):
+        if st.button("Get Sensor Data", use_container_width=True):
             try:
                 r = requests.get("https://esp32-fastapi-server-uh47.onrender.com/data", timeout=5)
-                r.raise_for_status()
-                d = r.json().get("data", {})
-                st.session_state.pir = d.get("pir")
-                st.session_state.ir = d.get("ir")
-                st.session_state.last_distance = d.get("ultrasonic")
-                if st.session_state.last_distance is None:
-                    st.warning("No ultrasonic data found.")
+                if r.status_code == 200:
+                    d = r.json().get("data", {})
+                    st.session_state.pir = d.get("pir")
+                    st.session_state.ir = d.get("ir")
+                    st.session_state.last_distance = d.get("ultrasonic")
+                    if st.session_state.last_distance is None:
+                        st.warning("No ultrasonic data found.")
+                else:
+                    st.error(f"Server responded with {r.status_code}")
             except Exception as e:
-                st.error(f"Error fetching sensor data: {e}")
+                st.error(f"Error: {e}")
 
-    # If a last reading exists, let user assign it
-    if st.session_state.last_distance is not None:
+    # --- CASE 2: Have a new distance waiting to assign ---
+    elif st.session_state.last_distance is not None:
         st.subheader("Last Measured Distance")
         st.write(f"{st.session_state.last_distance} cm")
-        if st.session_state.length is None:
-            if st.button("Set as Length"):
-                st.session_state.length = st.session_state.last_distance
-                st.session_state.last_set = "length"
-                st.session_state.last_distance = None
-        if st.session_state.breadth is None:
-            if st.button("Set as Breadth"):
+
+        # --- Subcase 2A: No dimensions set yet (Both Length and Breadth options available) ---
+        if st.session_state.length is None and st.session_state.breadth is None:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("Set as Length", use_container_width=True):
+                    st.session_state.length = st.session_state.last_distance
+                    st.session_state.last_set = "length"
+                    st.session_state.last_distance = None
+                    st.rerun()
+            with col2:
+                if st.button("Set as Breadth", use_container_width=True):
+                    st.session_state.breadth = st.session_state.last_distance
+                    st.session_state.last_set = "breadth"
+                    st.session_state.last_distance = None
+                    st.rerun()
+
+        # --- Subcase 2B: Length is set, waiting for Breadth (Show Breadth button full width) ---
+        elif st.session_state.length is not None and st.session_state.breadth is None:
+            if st.button("Set as Breadth", use_container_width=True):
                 st.session_state.breadth = st.session_state.last_distance
                 st.session_state.last_set = "breadth"
                 st.session_state.last_distance = None
-        if st.button("Reset Last Value"):
-            st.session_state.last_distance = None
-            st.info("Cleared last measurement.")
+                st.rerun()
 
-    st.markdown("---")
+        # --- Subcase 2C: Breadth is set, waiting for Length (Show Length button full width) ---
+        elif st.session_state.breadth is not None and st.session_state.length is None:
+            if st.button("Set as Length", use_container_width=True):
+                st.session_state.length = st.session_state.last_distance
+                st.session_state.last_set = "length"
+                st.session_state.last_distance = None
+                st.rerun()
+
+        if st.button("Reset Last Value", use_container_width=True):
+            st.session_state.last_distance = None
+            st.info("Last value cleared.")
+            st.rerun()
+
+    # --- CASE 3: One dimension set, waiting for the other ---
+    elif (st.session_state.length is not None) ^ (st.session_state.breadth is not None):
+        st.info("Now get the other dimension.")
+        if st.button("Get Sensor Data", use_container_width=True):
+            try:
+                r = requests.get("https://esp32-fastapi-server-uh47.onrender.com/data", timeout=5)
+                if r.status_code == 200:
+                    d = r.json().get("data", {})
+                    st.session_state.pir = d.get("pir")
+                    st.session_state.ir = d.get("ir")
+                    st.session_state.last_distance = d.get("ultrasonic")
+                    if st.session_state.last_distance is None:
+                        st.warning("No ultrasonic data found.")
+                else:
+                    st.error(f"Server responded with {r.status_code}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+        # show reset for whichever one is set
+        if st.session_state.length is not None:
+            if st.button("Reset Entered Length", use_container_width=True):
+                st.session_state.length = None
+                st.session_state.last_set = None
+                st.info("Length cleared.")
+                st.rerun()
+        if st.session_state.breadth is not None:
+            if st.button("Reset Entered Breadth", use_container_width=True):
+                st.session_state.breadth = None
+                st.session_state.last_set = None
+                st.info("Breadth cleared.")
+                st.rerun()
+
+    # --- CASE 4: Both captured ---
+    elif st.session_state.length and st.session_state.breadth:
+        st.success("Both Length and Breadth captured successfully.")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Reset Latest", use_container_width=True):
+                if st.session_state.last_set == "length":
+                    st.session_state.length = None
+                else:
+                    st.session_state.breadth = None
+                st.info("Latest entry cleared.")
+                st.rerun()
+        with col2:
+            if st.button("Reset All", use_container_width=True):
+                for k in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
+                    st.session_state[k] = None
+                st.info("All cleared.")
+                st.rerun()
+        st.divider()
+    st.divider()
     st.subheader("Current Measurements")
     st.write(f"Length: {st.session_state.length if st.session_state.length else '—'} cm")
     st.write(f"Breadth: {st.session_state.breadth if st.session_state.breadth else '—'} cm")
 
+    if st.session_state.pir is not None or st.session_state.ir is not None:
+        st.divider()
+        st.subheader("Motion & Obstacle Sensors")
+        pir_status = "Motion Detected" if st.session_state.pir else "No Motion"
+        ir_status = "Obstacle Detected" if not st.session_state.ir else "Clear Path"
+        st.write(f"PIR: {pir_status}")
+        st.write(f"IR: {ir_status}")
     if st.session_state.length and st.session_state.breadth:
         st.divider()
         st.subheader("Generate Floorplan from Captured Dimensions")
+
+        # Convert from cm → m
         length_m = st.session_state.length * 0.01
         breadth_m = st.session_state.breadth * 0.01
-        area_m2 = max(100.0, length_m * breadth_m)
+        area_m2 = length_m * breadth_m
         area_sqft = area_m2 * 10.7639
-        st.write(f"Final Dimensions: {length_m:.2f} m × {breadth_m:.2f} m")
-        st.write(f"Calculated Area: {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)")
-        bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1, key="sensor_beds")
-        denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False, key="sensor_denoise")
-        if st.button("Generate Floorplans from Sensor Dimensions"):
-            with st.spinner("Generating..."):
-                images, pixel_area = generate_final_plans(GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option)
-            cols = st.columns(3)
-            for i, img in enumerate(images):
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                cols[i].image(img, caption=f"Plan {i+1}")
-                cols[i].download_button("Download", buf.getvalue(), file_name=f"sensor_plan_{i+1}.png", mime="image/png")
 
-# ----------------------------
+        st.write(f"**Final Dimensions:** {length_m:.2f} m × {breadth_m:.2f} m")
+        st.write(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)")
+
+        bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
+        denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+
+        if st.button("Generate Floorplans", type="primary", use_container_width=True):
+            dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
+                GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+            )
+
+            st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
+            st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
+            st.markdown("Generated Floorplans:")
+
+            cols = st.columns(3)
+            for i, col in enumerate(cols):
+                if i < len(floor_plan_images):
+                    img = floor_plan_images[i]
+                    seg_img = apply_segmentation(img, bedrooms)
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    col.image(img, caption=f"Plan {i+1}", use_column_width=True)
+                    col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                    col.download_button(
+                        label=f"Download Plan {i+1}",
+                        data=buf.getvalue(),
+                        file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                        mime="image/png",
+                    )
+
+# -------------------------
 # Mode: Optimized Layout
-# ----------------------------
+# -------------------------
 elif mode == "Optimized Layout":
-    st.header("Optimized Layout Generator")
-    left, right = st.columns(2)
-    with left:
+    colA, colB = st.columns(2)
+    with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
-        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3, step=1)
-    with right:
-        property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
+    with colB:
+        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
+    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
+    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
+    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+    colW, colH = st.columns(2)
+    with colW:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+    with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
     if st.button("Generate Optimized Layout"):
-        with st.spinner("Optimizing layout..."):
-            layout = generate_semantic_layout(total_area, num_rooms, property_type, plot_w, plot_h)
-            dwelling_type = predict_dwelling_type(total_area, layout.get("num_bedrooms", 0), RF_MODEL)
-            fig = plot_layout(layout, plot_w, plot_h, title=f"{property_type} Layout")
-        st.success(f"Predicted Dwelling Type: {dwelling_type}")
-        st.pyplot(fig)
+        with st.spinner("Generating layout..."):
+            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
+            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
+            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
+            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
+            st.pyplot(fig)
 
-# ----------------------------
-# Floating Chatbot widget (Left corner) — stable implementation
-# ----------------------------
-# This implementation uses a Streamlit-managed floating button (styled) to toggle a chat panel.
-# The panel itself contains Streamlit elements (so no fragility with raw JS or experimental_rerun).
+# -------------------------
+# Mode: ChatBot (integrated)
+# -------------------------
+elif mode == "ChatBot":
+    st.header("AEC / BIM Chatbot")
 
-# Ensure chat session keys
-if "chat_open" not in st.session_state:
-    st.session_state.chat_open = False
-if "floating_chat_history" not in st.session_state:
-    # store messages as list of {"role":"user"/"assistant","content": "..."}
-    st.session_state.floating_chat_history = []
-if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = (
-        "You are an expert AEC/BIM architect and engineer. Answer clearly and concisely. "
-        "Provide checklists and step-by-step guidance when helpful."
-    )
-
-# Groq HTTP helper (uses requests) — no groq SDK required
-def call_groq_chat(messages, model="deepseek-r1-distill-llama-70b", max_tokens=400, timeout=30):
-    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT") or st.secrets.get("GROQ_API_KEY")
+    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
-        return "Error: ARCH_AI_TEX_CHATBOT not set in Streamlit secrets."
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.2}
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=timeout)
-        r.raise_for_status()
-        j = r.json()
-        choice = j.get("choices", [{}])[0]
-        # new shape: choice.message.content or fallback choice.text
-        if isinstance(choice.get("message"), dict):
-            return choice["message"].get("content", "")
-        else:
-            return choice.get("text", "")
-    except Exception as e:
-        return f"API Error: {e}"
+        st.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
+    else:
+        def ask_groq(messages):
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            data = {
+                "model": "llama-3.1-8b-instant",
+                "messages": messages,
+                "temperature": 0.2,
+            }
+            try:
+                resp = requests.post(url, json=data, headers=headers, timeout=30)
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                return f"Error calling LLM API: {e}"
 
-# Toggle chat callback (Streamlit-safe)
-def toggle_chat():
-    st.session_state.chat_open = not st.session_state.chat_open
+        # Init chat history with a system prompt tuned to BIM/AEC
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": (
+                    "You are an expert AEC/BIM architect and engineer. "
+                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
+                )}
+            ]
 
-# Floating button CSS (left-bottom)
-st.markdown(
-    """
-    <style>
-    .floating-button-area {
-        position: fixed;
-        left: 18px;
-        bottom: 20px;
-        z-index: 2000;
-    }
-    .floating-button-area .stButton>button {
-        width: 65px;
-        height: 65px;
-        padding: 0;
-        border-radius: 50%;
-        background-color: #ff4b4b;
-        color: white;
-        font-size: 28px;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-        border: none;
-    }
-    .chat-panel {
-        position: fixed;
-        left: 18px;
-        bottom: 100px;
-        width: 380px;
-        height: 520px;
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 6px 24px rgba(0,0,0,0.25);
-        z-index: 2000;
-        padding: 12px;
-        overflow-y: auto;
-    }
-    .chat-user { background: #d0f0ff; padding: 8px 12px; border-radius: 10px; margin: 8px 0; width: 85%; }
-    .chat-bot  { background: #fff3cd; padding: 8px 12px; border-radius: 10px; margin: 8px 0; width: 85%; }
-    .chat-controls { display:flex; gap:8px; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        # Render existing chat messages (skip system message)
+        for msg in st.session_state.chat_history[1:]:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
-# Render floating button area
-floating_button = st.empty()
-with floating_button.container():
-    st.markdown('<div class="floating-button-area">', unsafe_allow_html=True)
-    st.button("💬", key="floating_chat_toggle_btn", on_click=toggle_chat)
-    st.markdown("</div>", unsafe_allow_html=True)
+        # Chat input
+        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
 
-# Render chat panel if open
-if st.session_state.chat_open:
-    st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
+        if user_input:
+            # append user message and display it
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.chat_message("user").write(user_input)
 
-    # header and close
-    header_cols = st.columns([0.8, 0.2])
-    with header_cols[0]:
-        st.markdown("<b>Arch-Ai-Tex ChatBot</b>", unsafe_allow_html=True)
-    with header_cols[1]:
-        if st.button("Close", key="floating_chat_close"):
-            st.session_state.chat_open = False
+            # call model with full conversation
+            answer = ask_groq(st.session_state.chat_history)
 
-    st.markdown("<hr/>", unsafe_allow_html=True)
+            # append and display assistant reply
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            st.chat_message("assistant").write(answer)
 
-    # Show history
-    for msg in st.session_state.floating_chat_history:
-        role = msg.get("role", "assistant")
-        content = msg.get("content", "")
-        if role == "user":
-            st.markdown(f"<div class='chat-user'><b>You:</b> {content}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='chat-bot'><b>Bot:</b> {content}</div>", unsafe_allow_html=True)
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-
-    # Input + actions
-    user_input = st.text_input("Type your message...", value="", key="floating_chat_input_box")
-    col_send, col_clear = st.columns([0.6, 0.4])
-    with col_send:
-        if st.button("Send", key="floating_chat_send"):
-            if user_input.strip():
-                st.session_state.floating_chat_history.append({"role": "user", "content": user_input})
-                # prepare messages: start with system prompt then history
-                messages_for_api = [{"role": "system", "content": st.session_state.system_prompt}]
-                for m in st.session_state.floating_chat_history:
-                    # API expects "user" / "assistant"
-                    api_role = "assistant" if m["role"] == "assistant" else "user"
-                    messages_for_api.append({"role": api_role, "content": m["content"]})
-                # call API
-                with st.spinner("Thinking..."):
-                    reply = call_groq_chat(messages_for_api)
-                st.session_state.floating_chat_history.append({"role": "assistant", "content": reply})
-                # clear text input state
-                st.session_state.floating_chat_input_box = ""
-    with col_clear:
-        if st.button("Clear Chat", key="floating_chat_clear"):
-            st.session_state.floating_chat_history = []
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# Footer / small note
-st.markdown("---")
-st.markdown("Built with ❤️ — Arch-Ai-Tex")
-
+# End of file
 # https://esp32-fastapi-server-uh47.onrender.com/data
