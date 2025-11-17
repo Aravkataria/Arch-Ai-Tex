@@ -14,6 +14,8 @@ from PIL import Image
 import requests
 import time
 
+st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
+
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.markdown("""
