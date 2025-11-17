@@ -194,7 +194,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
         # safe f-string: do not include problematic unicode directly
-        label_text = f"{r['name']}\n
+        label_text = f"{r['name']}\n{r['area']} m^2"
 {r['area']} m^2"
         ax.text(x + w / 2, y + h / 2, label_text, ha='center', va='center', fontsize=8)
         x += w + pad
