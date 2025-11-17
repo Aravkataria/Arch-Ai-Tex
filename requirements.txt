@@ -24,4 +24,4 @@ streamlit-3d==0.1.12
 
 groq
 
-open3d
+open3d==0.17.0A
