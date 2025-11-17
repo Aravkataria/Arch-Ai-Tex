@@ -18,14 +18,29 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.markdown("""
 <style>
-/* Add padding inside columns to create a clean gap */
-div[data-testid="column"]:nth-of-type(1) {
-    padding-right: 25px;   /* gap between chatbot and generator */
+
+/* Main app width */
+.block-container {
+    max-width: 1000px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 
-div[data-testid="column"]:nth-of-type(2) {
-    padding-left: 25px;    /* spacing inside right panel */
+/* GAP + SEPARATOR between Chatbot and Main App */
+div[data-testid="column"]:first-child {        /* Chatbot column */
+    border-right: 2px solid #dcdcdc !important;  /* vertical separator */
+    padding-right: 20px !important;              /* spacing inside */
 }
+
+div[data-testid="column"]:nth-child(2) {        /* Main generator column */
+    padding-left: 35px !important;              /* gap from separator */
+}
+
+/* Optional: more breathing room between sections */
+section[data-testid="stVerticalBlock"] {
+    margin-bottom: 25px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
