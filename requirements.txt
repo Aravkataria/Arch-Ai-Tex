@@ -1,30 +1,30 @@
-# CORE APPLICATION
+# CORE APPLICATION (Keep versions locked)
 streamlit==1.39.0
 numpy==1.26.4
 pandas==2.2.3
 Pillow==10.4.0
 joblib==1.4.2
 matplotlib==3.9.2
-scikit-learn
+scikit-learn==1.5.2
 plotly
 requests
 groq
 
-# DEEP LEARNING (CPU-ONLY for reliable cloud deployment)
+# DEEP LEARNING (CRITICAL: Force CPU-only installation for stability)
+# Using index-url to pull pre-compiled CPU wheels
 torch --index-url https://download.pytorch.org/whl/cpu
 torchvision --index-url https://download.pytorch.org/whl/cpu
-# torchaudio (Removed for simplicity and compatibility)
 
-# IMAGES AND NLP
+# IMAGES AND NLP (Using robust versions)
 opencv-python-headless
 transformers==4.45.0
 sentencepiece
 diffusers
 
-# 3D AND GEOMETRY (Use unversioned to find compatible wheels)
-open3d==0.18.0
+# 3D AND GEOMETRY (CRITICAL: Remove version to grab the latest compatible wheel)
+open3d
 trimesh
 
-# WEB BACKEND
+# WEB BACKEND (Included only if needed for local testing/API interaction)
 fastapi
 uvicorn
