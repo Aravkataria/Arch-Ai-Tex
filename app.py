@@ -23,6 +23,7 @@ DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
+CEILING_HEIGHT = 3.0  # Fixed as requested
 
 class DCGAN_Generator(nn.Module):
     @staticmethod
@@ -190,7 +191,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
     ax.set_title(title)
     return fig
 
-def rect_to_prism_vertices(x, y, w, h, z0=0.0, height=3.0):
+def rect_to_prism_vertices(x, y, w, h, z0=0.0, height=CEILING_HEIGHT):
     v0 = (x, y, z0)
     v1 = (x + w, y, z0)
     v2 = (x + w, y + h, z0)
@@ -216,7 +217,7 @@ def build_mesh_from_prisms(prism_list):
     i_faces, j_faces, k_faces = [], [], []
     vert_offset = 0
     for prism in prism_list:
-        verts, faces = rect_to_prism_vertices(prism['x'], prism['y'], prism['w'], prism['h'], z0=0.0, height=prism.get('height', 3.0))
+        verts, faces = rect_to_prism_vertices(prism['x'], prism['y'], prism['w'], prism['h'], z0=0.0, height=prism.get('height', CEILING_HEIGHT))
         for v in verts:
             verts_all.append(v)
         for (a,b,c) in faces:
@@ -237,7 +238,7 @@ def build_mesh_from_prisms(prism_list):
     return mesh
 
 
-def layout_to_prisms(layout, plot_w, plot_h, ceiling_height=3.0):
+def layout_to_prisms(layout, plot_w, plot_h, ceiling_height=CEILING_HEIGHT):
     rooms = layout.get("rooms", [])
     total_area = sum(r["area"] for r in rooms) or 1.0
     scale = (plot_w * plot_h) / total_area
@@ -279,7 +280,7 @@ def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
         fig.update_layout(title="No 3D geometry to show")
         return fig
     
-    max_z = prisms_or_meshes[0].get('height', 3.0) if prisms_or_meshes and isinstance(prisms_or_meshes[0], dict) else 3.0
+    max_z = CEILING_HEIGHT
     
     plane = go.Scatter3d(
         x=[0, plot_w, plot_w, 0, 0],
@@ -307,7 +308,7 @@ def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
     )
     return fig
 
-def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=3.0, wall_thickness_m=0.15):
+def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, wall_thickness_m=0.15):
     mesh_elements = []
     
     WALL_COLOR = 'rgb(200, 200, 200)'
@@ -389,7 +390,7 @@ def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=3.0, wall_thickn
     return mesh_elements
 
 
-def segmentation_to_contour_meshes(seg_img_pil, img_display_w, img_display_h, ceiling_height=3.0, min_area_px=200):
+def segmentation_to_contour_meshes(seg_img_pil, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT, min_area_px=200):
     seg_np = np.array(seg_img_pil.convert("RGB"))
     gray = cv2.cvtColor(seg_np, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 5, 255, cv2.THRESH_BINARY)
@@ -467,7 +468,8 @@ if mode == "GAN Generator":
     st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)**")
     bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
     denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-    ceiling_height = st.number_input("Ceiling Height (m)", min_value=2.0, value=3.0, step=0.1)
+    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
@@ -491,20 +493,21 @@ if mode == "GAN Generator":
                     mime="image/png",
                 )
 
-                if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_gan_{i}"):
-                    img_w_px, img_h_px = img.size
-                    img_display_w = house_length
-                    img_display_h = house_width
-                    
-                    mesh_elements = segmentation_to_contour_meshes(
-                        seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height
-                    )
-                    
-                    if mesh_elements:
-                        fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
-                        col.plotly_chart(fig3d, use_container_width=True)
-                    else:
-                        col.info("No main building contour found to extrude.")
+                # 3D visualization is now automatic
+                img_display_w = house_length
+                img_display_h = house_width
+                
+                mesh_elements = segmentation_to_contour_meshes(
+                    seg_img, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT
+                )
+                
+                if mesh_elements:
+                    fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
+                    col.markdown("---")
+                    col.markdown(f"**3D View of Plan {i+1}**")
+                    col.plotly_chart(fig3d, use_container_width=True)
+                else:
+                    col.info("No main building contour found to extrude for 3D.")
 
 elif mode == "Real-Time Sensor Dashboard":
     st.header("Cloud Sensor Dashboard")
@@ -631,6 +634,7 @@ elif mode == "Real-Time Sensor Dashboard":
         ir_status = "Obstacle Detected" if not st.session_state.ir else "Clear Path"
         st.write(f"PIR: {pir_status}")
         st.write(f"IR: {ir_status}")
+        
     if st.session_state.length and st.session_state.breadth:
         st.divider()
         st.subheader("Generate Floorplan from Captured Dimensions")
@@ -645,7 +649,7 @@ elif mode == "Real-Time Sensor Dashboard":
 
         bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
         denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
-        ceiling_height = st.number_input("Ceiling Height (m)", min_value=2.0, value=3.0, step=0.1)
+        # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
 
         if st.button("Generate Floorplans", type="primary", use_container_width=True):
             dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
@@ -672,20 +676,21 @@ elif mode == "Real-Time Sensor Dashboard":
                         mime="image/png",
                     )
 
-                    if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_captured_{i}"):
-                        
-                        img_display_w = length_m
-                        img_display_h = breadth_m
-                        
-                        mesh_elements = segmentation_to_contour_meshes(
-                            seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height
-                        )
-                        
-                        if mesh_elements:
-                            fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
-                            col.plotly_chart(fig3d, use_container_width=True)
-                        else:
-                            col.info("No main building contour found to extrude.")
+                    # 3D visualization is now automatic
+                    img_display_w = length_m
+                    img_display_h = breadth_m
+                    
+                    mesh_elements = segmentation_to_contour_meshes(
+                        seg_img, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT
+                    )
+                    
+                    if mesh_elements:
+                        fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
+                        col.markdown("---")
+                        col.markdown(f"**3D View of Plan {i+1}**")
+                        col.plotly_chart(fig3d, use_container_width=True)
+                    else:
+                        col.info("No main building contour found to extrude for 3D.")
 
 elif mode == "Optimized Layout":
     colA, colB = st.columns(2)
@@ -701,7 +706,8 @@ elif mode == "Optimized Layout":
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-    ceiling_height = st.number_input("Ceiling Height (m)", min_value=2.0, value=3.0, step=0.1)
+    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
             layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
@@ -710,7 +716,8 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-            prisms = layout_to_prisms(layout, plot_w, plot_h, ceiling_height=ceiling_height)
+            # 3D visualization for optimized layout - uses simple prism logic
+            prisms = layout_to_prisms(layout, plot_w, plot_h, ceiling_height=CEILING_HEIGHT)
             if prisms:
                 fig3d = plot_layout_3d(prisms, plot_w, plot_h, title=f"{property_type} 3D Layout")
                 st.markdown("### 3D Visualization")
