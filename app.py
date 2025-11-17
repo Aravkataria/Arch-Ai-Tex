@@ -482,105 +482,167 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
             
-# ======================================================================
-#                  FLOATING GROQ CHATBOT (LEFT CORNER)
-# ======================================================================
-
-import streamlit as st
-
 # ----------------------------
-# FLOATING CHATBOT WIDGET CSS
+# FLOATING CHATBOT WIDGET (LEFT, stable - uses requests to Groq API)
 # ----------------------------
-st.markdown("""
+
+import requests
+
+# Ensure session keys
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
+if "floating_chat_history" not in st.session_state:
+    # store messages as list of {"role": "user"/"assistant", "content": "..."}
+    st.session_state.floating_chat_history = []
+if "floating_chat_input" not in st.session_state:
+    st.session_state.floating_chat_input = ""
+
+# Toggle callback (Streamlit-managed - reliable)
+def toggle_chat():
+    st.session_state.chat_open = not st.session_state.chat_open
+
+# Simple helper to call Groq-compatible chat endpoint via HTTP (no groq package)
+def call_groq_chat(messages, model="deepseek-r1-distill-llama-70b", max_tokens=400, timeout=30):
+    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT") or st.secrets.get("GROQ_API_KEY")
+    if not api_key:
+        return "Error: ARCH_AI_TEX_CHATBOT not set in Streamlit secrets."
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.2,
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+        j = resp.json()
+        # Try to extract content safely
+        choice = j.get("choices", [{}])[0]
+        # support both shapes: choice["message"]["content"] or choice["text"]
+        msg = ""
+        if isinstance(choice.get("message"), dict):
+            msg = choice["message"].get("content", "")
+        else:
+            msg = choice.get("text", "")
+        return msg or "(empty response)"
+    except Exception as e:
+        return f"API Error: {e}"
+
+# CSS (floating button + panel)
+st.markdown(
+    """
     <style>
-    /* Floating Button */
-    #chatbot-button {
+    .floating-button-area {
         position: fixed;
+        left: 18px;
         bottom: 20px;
-        left: 20px;
+        z-index: 2000;
+    }
+    .floating-button-area .stButton>button {
+        width: 65px;
+        height: 65px;
+        padding: 0;
+        border-radius: 50%;
         background-color: #ff4b4b;
         color: white;
-        border-radius: 50%;
-        width: 60px;
-        height: 60px;
         font-size: 28px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.25);
         border: none;
-        cursor: pointer;
-        z-index: 9999;
     }
-
-    /* Chat Window */
-    #chatbot-box {
+    .chat-panel {
         position: fixed;
+        left: 18px;
         bottom: 100px;
-        left: 20px;
         width: 380px;
-        height: 500px;
-        background: white;
-        border-radius: 15px;
-        box-shadow: 0px 4px 16px rgba(0,0,0,0.2);
-        padding: 10px;
-        display: none;
-        z-index: 9999;
+        height: 520px;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+        z-index: 2000;
+        padding: 12px;
+        overflow-y: auto;
     }
-
-    /* Show box */
-    #chatbot-box.show {
-        display: block !important;
+    .chat-user {
+        background: #d0f0ff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        margin: 8px 0;
+        width: 85%;
+    }
+    .chat-bot {
+        background: #fff3cd;
+        padding: 8px 12px;
+        border-radius: 10px;
+        margin: 8px 0;
+        width: 85%;
     }
     </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-    <script>
-    function toggleChatbot() {
-        var box = document.getElementById('chatbot-box');
-        if (box.classList.contains('show')) {
-            box.classList.remove('show');
-        } else {
-            box.classList.add('show');
-        }
-    }
-    </script>
-""", unsafe_allow_html=True)
+# Render floating button
+button_area = st.empty()
+with button_area.container():
+    st.markdown('<div class="floating-button-area">', unsafe_allow_html=True)
+    st.button("💬", key="toggle_chat_widget", on_click=toggle_chat)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ----------------------------
-# FLOATING BUTTON
-# ----------------------------
-st.markdown('<button id="chatbot-button" onclick="toggleChatbot()">💬</button>', unsafe_allow_html=True)
+# Render chat panel only when open
+if st.session_state.chat_open:
+    st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
 
-# ----------------------------
-# CHAT WINDOW CONTAINER
-# ----------------------------
-chatbot_container = st.container()
-with chatbot_container:
-    st.markdown('<div id="chatbot-box">', unsafe_allow_html=True)
+    # Header + close
+    cols = st.columns([0.75, 0.25])
+    with cols[1]:
+        if st.button("Close", key="close_chat_widget"):
+            st.session_state.chat_open = False
+    st.markdown("<h4 style='margin-top:0;'>Arch-Ai-Tex ChatBot</h4>", unsafe_allow_html=True)
 
-    st.write("### Arch-Ai-Tex ChatBot")
+    # History display
+    for m in st.session_state.floating_chat_history:
+        role = m.get("role", "assistant")
+        text = m.get("content", "")
+        if role == "user":
+            st.markdown(f"<div class='chat-user'><b>You:</b> {text}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='chat-bot'><b>Bot:</b> {text}</div>", unsafe_allow_html=True)
 
-    # Initialize chat history
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # Display messages
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+    # Input area
+    user_input = st.text_input(
+        "Type your message...",
+        value=st.session_state.floating_chat_input,
+        key="floating_chat_input_box"
+    )
 
-    # Chat input
-    user_prompt = st.chat_input("Type your message...")
+    if st.button("Send", key="floating_chat_send_btn"):
+        if user_input and user_input.strip():
+            # append user message
+            st.session_state.floating_chat_history.append({"role": "user", "content": user_input})
 
-    if user_prompt:
-        st.session_state.chat_history.append({"role": "user", "content": user_prompt})
-        with st.chat_message("user"):
-            st.write(user_prompt)
+            # prepare messages for API: convert to [{"role":"user"/"assistant","content":...}, ...]
+            messages_for_api = []
+            for msg in st.session_state.floating_chat_history:
+                # map "assistant" role name expected by API
+                role = "assistant" if msg["role"] == "assistant" else "user"
+                messages_for_api.append({"role": role, "content": msg["content"]})
 
-        # --- AI RESPONSE ---
-        reply = "This is your working chatbot reply 👍"
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"):
-            st.write(reply)
+            # call API with spinner
+            with st.spinner("Thinking..."):
+                bot_reply = call_groq_chat(messages_for_api)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+            # append bot reply
+            st.session_state.floating_chat_history.append({"role": "assistant", "content": bot_reply})
 
+            # clear input state (so textbox clears on next rerun)
+            st.session_state.floating_chat_input = ""
+            st.session_state.floating_chat_input_box = ""
 
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
