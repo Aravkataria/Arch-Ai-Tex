@@ -477,14 +477,16 @@ elif mode == "Real-Time Sensor Dashboard":
                     img.save(buf, format="PNG")
                     col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                     col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
-                    col.download_button(
+                    # Corrected indentation for the PNG download button:
+                    col.download_button( 
                         label=f"Download Plan {i+1}",
                         data=buf.getvalue(),
                         file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                         mime="image/png",
                     )
                     ply_data = generate_dummy_ply()
-                        col.download_button(
+                    # Corrected indentation for the PLY download button:
+                    col.download_button(
                         label=f"Download 3D Object (.ply) for Plan {i+1}",
                         data=ply_data,
                         file_name=f"plan_{i+1}.ply",
