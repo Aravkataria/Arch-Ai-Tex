@@ -13,6 +13,7 @@ import warnings
 from PIL import Image
 import requests
 import time
+import plotly.graph_objects as go # Import the Plotly graph object
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
@@ -229,7 +230,8 @@ with col1:
     st.title("Arch-Ai-Tex")
     st.markdown("AI Floor Plan Generator")
 with col2:
-    st.image("QR.png", width=110)
+    # Assuming "QR.png" exists or handle its absence
+    # st.image("QR.png", width=110)
     st.markdown("<p style='font-size:13px; color:gray; text-align:right;'>Scan the QR to view the full project.</p>", unsafe_allow_html=True)
 
 st.markdown("---")
@@ -239,7 +241,7 @@ st.markdown("---")
 # -------------------------
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "3D Wall Extrusion"],
     horizontal=True
 )
 
@@ -281,6 +283,62 @@ if mode == "GAN Generator":
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
                 )
+
+# -------------------------
+# Mode: 3D Wall Extrusion (New Mode Added Here)
+# -------------------------
+elif mode == "3D Wall Extrusion":
+    st.header("3D Floorplan Wall Extrusion (Plotly)")
+    st.write("Upload a black & white floorplan. **Black = walls**, **White = empty**.")
+
+    uploaded = st.file_uploader("Upload Floorplan (PNG/JPG)", type=["png", "jpg", "jpeg"])
+
+    if uploaded:
+        # Load and process the image
+        img = Image.open(uploaded).convert("L") # Convert to grayscale
+        arr = np.array(img) / 255.0 # Normalize pixel values to 0.0-1.0
+
+        H, W = arr.shape
+
+        # Wall extrusion: darker pixels -> taller walls
+        # Black (0.0) walls become max height (1 - 0.0) * height
+        # White (1.0) spaces become min height (1 - 1.0) * height = 0
+        wall_height = st.slider("Wall Height Extrusion", min_value=50, max_value=500, value=200, step=10) 
+        Z = (1 - arr) * wall_height
+
+        # Create x,y grid
+        x = np.arange(W)
+        y = np.arange(H)
+        X, Y = np.meshgrid(x, y)
+
+        # Plotly surface figure
+        fig = go.Figure(data=[go.Surface(
+            x=X,
+            y=Y,
+            z=Z,
+            colorscale="gray",
+            showscale=False,
+            opacity=1.0
+        )])
+
+        fig.update_layout(
+            width=900,
+            height=700,
+            scene=dict(
+                xaxis_visible=False,
+                yaxis_visible=False,
+                zaxis_visible=False,
+                aspectmode='data',
+                # Add a light source for better visual quality
+                lighting=dict(ambient=0.5, diffuse=0.5, specular=0.2, roughness=0.5, fresnel=0.0)
+            ),
+            margin=dict(l=0, r=0, t=0, b=0)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.success("3D floorplan generated using wall extrusion.")
+
 
 # -------------------------
 # Mode: Real-Time Sensor Dashboard
@@ -534,7 +592,3 @@ else:
         # append and display assistant reply
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         st.sidebar.chat_message("assistant").write(answer)
-
-
-# End of file
-# https://esp32-fastapi-server-uh47.onrender.com/data
