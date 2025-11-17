@@ -489,12 +489,15 @@ elif mode == "Optimized Layout":
 # -------------------------
 # Mode: ChatBot (integrated)
 # -------------------------
+# -------------------------
+# Mode: ChatBot (integrated)
+# -------------------------
 elif mode == "ChatBot":
-    st.header("Arch-Ai-Tex Chatbot")
+    st.sidebar.header("Architecture / Design Chatbot")
 
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
-        st.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
+        st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
     else:
         def ask_groq(messages):
             url = "https://api.groq.com/openai/v1/chat/completions"
@@ -522,24 +525,23 @@ elif mode == "ChatBot":
 
         # Render existing chat messages (skip system message)
         for msg in st.session_state.chat_history[1:]:
-            with st.chat_message(msg["role"]):
+            with st.sidebar.chat_message(msg["role"]):
                 st.write(msg["content"])
 
         # Chat input
-        user_input = st.chat_input("Ask anything about Architecture or Interior Design…")
+        user_input = st.sidebar.chat_input("Ask anything about Architecture or Interior Design…")
 
         if user_input:
             # append user message and display it
             st.session_state.chat_history.append({"role": "user", "content": user_input})
-            st.chat_message("user").write(user_input)
+            st.sidebar.chat_message("user").write(user_input)
 
             # call model with full conversation
             answer = ask_groq(st.session_state.chat_history)
 
             # append and display assistant reply
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.chat_message("assistant").write(answer)
-
+            st.sidebar.chat_message("assistant").write(answer)
 
 # End of file
 # https://esp32-fastapi-server-uh47.onrender.com/data
