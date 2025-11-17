@@ -20,11 +20,11 @@ st.markdown("""
 <style>
 /* Add padding inside columns to create a clean gap */
 div[data-testid="column"]:nth-of-type(1) {
-    padding-right: 50px;   /* gap between chatbot and generator */
+    padding-right: 25px;   /* gap between chatbot and generator */
 }
 
 div[data-testid="column"]:nth-of-type(2) {
-    padding-left: 50px;    /* spacing inside right panel */
+    padding-left: 25px;    /* spacing inside right panel */
 }
 </style>
 """, unsafe_allow_html=True)
