@@ -482,24 +482,32 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
             
-# ------------------ ROBUST FLOATING CHATBOT (LEFT-CORNER) ------------------
-# Place this at the very end of your script (replace previous floating widget code).
+# ======================================================================
+#                  FLOATING GROQ CHATBOT (LEFT CORNER)
+# ======================================================================
 
-# Ensure session keys exist
+import streamlit as st
+from groq import Groq
+
+# Initialize Groq client
+client = Groq(api_key=st.secrets["ARCH_AI_TEX_CHATBOT"])
+
+# Ensure session keys
 if "chat_open" not in st.session_state:
     st.session_state.chat_open = False
 if "floating_chat_history" not in st.session_state:
-    st.session_state.floating_chat_history = []
+    st.session_state.floating_chat_history = []   # [(role, text)]
+if "floating_chat_input" not in st.session_state:
+    st.session_state.floating_chat_input = ""
 
-# Toggle callback
+# Toggle open/close
 def toggle_chat():
     st.session_state.chat_open = not st.session_state.chat_open
 
-# CSS to make the Streamlit button look & sit like a floating icon (left-bottom)
+# CSS for floating button + chat panel
 st.markdown(
     """
     <style>
-    /* Position the container that will hold the Streamlit button */
     .floating-button-area {
         position: fixed;
         left: 18px;
@@ -507,7 +515,6 @@ st.markdown(
         z-index: 2000;
     }
 
-    /* Style the streamlit button inside this area to look circular */
     .floating-button-area .stButton>button {
         width: 65px;
         height: 65px;
@@ -515,16 +522,11 @@ st.markdown(
         border-radius: 50%;
         background-color: #4CAF50;
         color: white;
-        font-size: 26px;
+        font-size: 28px;
         box-shadow: 0 6px 18px rgba(0,0,0,0.25);
         border: none;
     }
-    .floating-button-area .stButton>button:hover {
-        transform: scale(1.05);
-        background-color: #45a049;
-    }
 
-    /* Chat panel - absolute left */
     .chat-panel {
         position: fixed;
         left: 18px;
@@ -539,15 +541,6 @@ st.markdown(
         overflow-y: auto;
     }
 
-    .chat-panel .close-btn {
-        position: absolute;
-        right: 12px;
-        top: 10px;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    /* Simple chat bubble styles */
     .chat-user {
         background: #d0f0ff;
         padding: 8px 12px;
@@ -555,6 +548,7 @@ st.markdown(
         margin: 8px 0;
         width: 85%;
     }
+
     .chat-bot {
         background: #fff3cd;
         padding: 8px 12px;
@@ -567,32 +561,28 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# small layout: the button must be rendered in a container so CSS targets it
-button_placeholder = st.empty()
-with button_placeholder.container():
+
+# Floating button
+button_area = st.empty()
+with button_area.container():
     st.markdown('<div class="floating-button-area">', unsafe_allow_html=True)
-    # Render the toggle button. This button is reliably clickable (Streamlit-managed).
-    if st.button("💬", key="toggle_chat_button", on_click=toggle_chat):
-        # callback toggles session_state; nothing else required here
-        pass
+    st.button("💬", key="toggle_chat_widget", on_click=toggle_chat)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Chat panel rendering controlled by session_state
+
+# ---------------- CHAT PANEL ----------------
 if st.session_state.chat_open:
-    # Render the panel (no JS needed)
     st.markdown('<div class="chat-panel">', unsafe_allow_html=True)
 
-    # Close button (just a normal Streamlit button aligned visually)
-    col1, col2 = st.columns([0.8, 0.2])
-    with col2:
-        if st.button("✖ Close", key="close_chat_button"):
+    close_col, space_col = st.columns([0.3, 0.7])
+    with close_col:
+        if st.button("Close", key="close_chat_widget"):
             st.session_state.chat_open = False
-            # force a small rerun to hide panel immediately
-            st.experimental_rerun()
+            st.stop()
 
     st.markdown("<h4 style='margin-top:0;'>Arch-Ai-Tex ChatBot</h4>", unsafe_allow_html=True)
 
-    # --- Chat history display ---
+    # Display chat history
     for role, text in st.session_state.floating_chat_history:
         if role == "user":
             st.markdown(f"<div class='chat-user'><b>You:</b> {text}</div>", unsafe_allow_html=True)
@@ -601,31 +591,47 @@ if st.session_state.chat_open:
 
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # --- Input area ---
-    user_input = st.text_input("Type your question...", key="floating_chat_input")
-    send_col, spacer = st.columns([0.3, 0.7])
-    with send_col:
-        if st.button("Send", key="floating_chat_send"):
-            if user_input and user_input.strip() != "":
-                # append user
-                st.session_state.floating_chat_history.append(("user", user_input))
+    # Input
+    user_input = st.text_input(
+        "Type your message...",
+        value=st.session_state.floating_chat_input,
+        key="floating_chat_input_box"
+    )
 
-                # --- CALL YOUR ACTUAL LLM / GROQ HERE ---
-                # Replace the mock reply below with your real function call (ask_groq)
-                # Example:
-                # reply = ask_groq(st.session_state.some_history_structure)
-                # For now we return a placeholder to verify the flow:
-                reply = f"(placeholder reply) I received: {user_input}"
+    if st.button("Send", key="floating_chat_send"):
 
-                # append bot reply
-                st.session_state.floating_chat_history.append(("bot", reply))
+        if user_input.strip() != "":
+            # Add user message
+            st.session_state.floating_chat_history.append(("user", user_input))
 
-                # clear input (works by setting session key)
-                st.session_state.floating_chat_input = ""
+            # Convert history into Groq-friendly format
+            groq_messages = []
+            for role, msg in st.session_state.floating_chat_history:
+                if role == "user":
+                    groq_messages.append({"role": "user", "content": msg})
+                else:
+                    groq_messages.append({"role": "assistant", "content": msg})
 
-                # rerun so UI updates and scroll appears updated
-                st.experimental_rerun()
+            # ADD LATEST USER INPUT
+            groq_messages.append({"role": "user", "content": user_input})
+
+            # Call Groq model
+            response = client.chat.completions.create(
+                model="deepseek-r1-distill-llama-70b",
+                messages=groq_messages,
+                max_tokens=300
+            )
+
+            bot_reply = response.choices[0].message["content"]
+
+            # Save bot reply
+            st.session_state.floating_chat_history.append(("bot", bot_reply))
+
+            # Clear input
+            st.session_state.floating_chat_input = ""
+            st.session_state.floating_chat_input_box = ""
 
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
