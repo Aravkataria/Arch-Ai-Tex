@@ -490,7 +490,7 @@ elif mode == "Optimized Layout":
 # Mode: ChatBot (integrated)
 # -------------------------
 elif mode == "ChatBot":
-    st.header("Architecture / Design Chatbot")
+    st.header("Arch-Ai-Tex Chatbot")
 
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
