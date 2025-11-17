@@ -697,7 +697,7 @@ elif mode == "Optimized Layout":
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3,
+        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=7,
                                     help="This count includes kitchen and bathroom.")
 
     st.markdown(
