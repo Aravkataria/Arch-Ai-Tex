@@ -19,11 +19,10 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 st.markdown("""
 <style>
-/* Increase entire app width */
 .block-container {
-    max-width: 1800px !important;   /* Increase main UI width */
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
+    max-width: 1200px !important;
+    margin-left: auto;
+    margin-right: auto;
 }
 </style>
 """, unsafe_allow_html=True)
