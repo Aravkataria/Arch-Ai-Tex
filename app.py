@@ -490,58 +490,58 @@ elif mode == "Optimized Layout":
 # Mode: ChatBot (integrated)
 # -------------------------
 # -------------------------
-# Mode: ChatBot (integrated)
+# Permanent Sidebar ChatBot
 # -------------------------
-elif mode == "ChatBot":
-    st.sidebar.header("Architecture / Design Chatbot")
+st.sidebar.header("Architecture / Design Chatbot")
 
-    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
-    if not api_key:
-        st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
-    else:
-        def ask_groq(messages):
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            data = {
-                "model": "llama-3.1-8b-instant",
-                "messages": messages,
-                "temperature": 0.2,
-            }
-            try:
-                resp = requests.post(url, json=data, headers=headers, timeout=30)
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
-            except Exception as e:
-                return f"Error calling LLM API: {e}"
+api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
+if not api_key:
+    st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
+else:
+    def ask_groq(messages):
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        data = {
+            "model": "llama-3.1-8b-instant",
+            "messages": messages,
+            "temperature": 0.2,
+        }
+        try:
+            resp = requests.post(url, json=data, headers=headers, timeout=30)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            return f"Error calling LLM API: {e}"
 
-        # Init chat history with a system prompt tuned to architecture/design
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                {"role": "system", "content": (
-                    "You are an expert architect and interior designer. "
-                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
-                )}
-            ]
+    # Init chat history with a system prompt tuned to architecture/design
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [
+            {"role": "system", "content": (
+                "You are an expert architect and interior designer. "
+                "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
+            )}
+        ]
 
-        # Render existing chat messages (skip system message)
-        for msg in st.session_state.chat_history[1:]:
-            with st.sidebar.chat_message(msg["role"]):
-                st.write(msg["content"])
+    # Render existing chat messages (skip system message)
+    for msg in st.session_state.chat_history[1:]:
+        with st.sidebar.chat_message(msg["role"]):
+            st.write(msg["content"])
 
-        # Chat input
-        user_input = st.sidebar.chat_input("Ask anything about Architecture or Interior Design…")
+    # Chat input
+    user_input = st.sidebar.chat_input("Ask anything about Architecture or Interior Design…")
 
-        if user_input:
-            # append user message and display it
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            st.sidebar.chat_message("user").write(user_input)
+    if user_input:
+        # append user message and display it
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        st.sidebar.chat_message("user").write(user_input)
 
-            # call model with full conversation
-            answer = ask_groq(st.session_state.chat_history)
+        # call model with full conversation
+        answer = ask_groq(st.session_state.chat_history)
 
-            # append and display assistant reply
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.sidebar.chat_message("assistant").write(answer)
+        # append and display assistant reply
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+        st.sidebar.chat_message("assistant").write(answer)
+
 
 # End of file
 # https://esp32-fastapi-server-uh47.onrender.com/data
