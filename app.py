@@ -485,11 +485,12 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
+
 # -------------------------
 # Mode: ChatBot (integrated)
 # -------------------------
 elif mode == "ChatBot":
-    st.header("AEC / BIM Chatbot")
+    st.header("Architecture / Design Chatbot")
 
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
@@ -510,11 +511,11 @@ elif mode == "ChatBot":
             except Exception as e:
                 return f"Error calling LLM API: {e}"
 
-        # Init chat history with a system prompt tuned to BIM/AEC
+        # Init chat history with a system prompt tuned to architecture/design
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = [
                 {"role": "system", "content": (
-                    "You are an expert AEC/BIM architect and engineer. "
+                    "You are an expert architect and interior designer. "
                     "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
                 )}
             ]
@@ -525,7 +526,7 @@ elif mode == "ChatBot":
                 st.write(msg["content"])
 
         # Chat input
-        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
+        user_input = st.chat_input("Ask anything about Architecture or Interior Design…")
 
         if user_input:
             # append user message and display it
@@ -538,6 +539,7 @@ elif mode == "ChatBot":
             # append and display assistant reply
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
             st.chat_message("assistant").write(answer)
+
 
 # End of file
 # https://esp32-fastapi-server-uh47.onrender.com/data
