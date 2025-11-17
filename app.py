@@ -228,7 +228,7 @@ st.markdown("""
 # --- LAYOUT CHANGE: Use 2 columns for the main layout ---
 # col_chatbot: Narrow column on the left (ratio 1)
 # col_main_app: Wider column for the rest of the application (ratio 4)
-col_chatbot, col_main_app = st.columns([1, 4])
+col_chatbot, col_main_app = st.columns([2, 3])
 
 
 # -------------------------
@@ -556,3 +556,5 @@ with col_main_app:
                 st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
                 fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
                 st.pyplot(fig)
+
+# https://esp32-fastapi-server-uh47.onrender.com/data
