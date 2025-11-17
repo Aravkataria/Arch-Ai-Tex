@@ -239,7 +239,7 @@ st.markdown("---")
 # -------------------------
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "ChatBot"],
     horizontal=True
 )
 
@@ -485,114 +485,59 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-# ---------------------------------------------------------
-# FLOATING CHATBOT WIDGET (ALWAYS VISIBLE)
-# ---------------------------------------------------------
-
-st.markdown("""
-<style>
-/* Floating button */
-#chatbot-button {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    width: 60px;
-    height: 60px;
-    background-color: #4CAF50;
-    color: white;
-    border-radius: 50%;
-    text-align: center;
-    font-size: 32px;
-    cursor: pointer;
-    z-index: 9999;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-}
-
-/* Chat window */
-#chatbot-window {
-    position: fixed;
-    left: 20px;
-    bottom: 100px;
-    width: 350px;
-    height: 450px;
-    background: white;
-    border-radius: 12px;
-    border: 1px solid #ccc;
-    display: none;
-    flex-direction: column;
-    padding: 10px;
-    z-index: 9999;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
-}
-
-/* Close button */
-#close-chatbot {
-    position: absolute;
-    right: 15px;
-    top: 8px;
-    font-size: 24px;
-    cursor: pointer;
-}
-</style>
-
-<div id="chatbot-button" onclick="document.getElementById('chatbot-window').style.display='flex'">💬</div>
-
-<div id="chatbot-window">
-    <div id="close-chatbot" onclick="document.getElementById('chatbot-window').style.display='none'">✖</div>
-    <h4>AEC / BIM Chatbot</h4>
-    <div id="st-chat-container">
-        <!-- Streamlit Chatbot Renders Here -->
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-# -----------------------------
-# Streamlit Chatbot Logic
-# -----------------------------
-with st.container():
-    st.markdown("<div style='height: 380px; overflow-y: auto;'>", unsafe_allow_html=True)
+# -------------------------
+# Mode: ChatBot (integrated)
+# -------------------------
+elif mode == "ChatBot":
+    st.header("AEC / BIM Chatbot")
 
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
-        st.error("ARCH_AI_TEX_CHATBOT key missing in secrets.")
+        st.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
     else:
-        if "float_chat_history" not in st.session_state:
-            st.session_state.float_chat_history = [
-                {"role": "system", "content": (
-                    "You are an expert AEC/BIM architect. Be accurate and concise." 
-                )}
-            ]
-
         def ask_groq(messages):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            data = {"model": "llama-3.1-8b-instant", "messages": messages, "temperature": 0.2}
+            data = {
+                "model": "llama-3.1-8b-instant",
+                "messages": messages,
+                "temperature": 0.2,
+            }
             try:
-                resp = requests.post(url, json=data, headers=headers, timeout=20)
+                resp = requests.post(url, json=data, headers=headers, timeout=30)
                 resp.raise_for_status()
                 return resp.json()["choices"][0]["message"]["content"]
             except Exception as e:
-                return f"Error contacting LLM: {e}"
+                return f"Error calling LLM API: {e}"
 
-        # Show past messages
-        for msg in st.session_state.float_chat_history[1:]:
+        # Init chat history with a system prompt tuned to BIM/AEC
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = [
+                {"role": "system", "content": (
+                    "You are an expert AEC/BIM architect and engineer. "
+                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
+                )}
+            ]
+
+        # Render existing chat messages (skip system message)
+        for msg in st.session_state.chat_history[1:]:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-        # Input
-        user_query = st.chat_input("Ask something… (AEC/BIM)")
+        # Chat input
+        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
 
-        if user_query:
-            st.session_state.float_chat_history.append({"role": "user", "content": user_query})
-            st.chat_message("user").write(user_query)
+        if user_input:
+            # append user message and display it
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.chat_message("user").write(user_input)
 
-            reply = ask_groq(st.session_state.float_chat_history)
+            # call model with full conversation
+            answer = ask_groq(st.session_state.chat_history)
 
-            st.session_state.float_chat_history.append({"role": "assistant", "content": reply})
-            st.chat_message("assistant").write(reply)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+            # append and display assistant reply
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            st.chat_message("assistant").write(answer)
 
 # End of file
 # https://esp32-fastapi-server-uh47.onrender.com/data
