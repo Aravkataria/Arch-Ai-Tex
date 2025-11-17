@@ -17,3 +17,5 @@ fastapi
 uvicorn
 streamlit-3d==0.1.12
 groq
+trimesh
+streamlit-3d==0.1.12
