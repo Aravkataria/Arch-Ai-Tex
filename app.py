@@ -697,10 +697,17 @@ elif mode == "Optimized Layout":
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-    st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
+        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3,
+                                    help="This count includes kitchen and bathroom.")
+
+    st.markdown(
+        "<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>",
+        unsafe_allow_html=True
+    )
+
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+
     colW, colH = st.columns(2)
     with colW:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
