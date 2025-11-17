@@ -193,7 +193,8 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             break
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m²", ha='center', va='center', fontsize=8)
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}
+{r['area']} m²", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
     ax.set_title(title)
@@ -293,7 +294,8 @@ def plot_layout_3d(prisms, plot_w, plot_h, title="3D Layout"):
     for p in prisms:
         cx = p['x'] + p['w']/2
         cy = p['y'] + p['h']/2
-        labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']}\n{p['area']} m²"], textposition="middle center", hoverinfo='skip'))
+        labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']}
+{p['area']} m²"], textposition="middle center", hoverinfo='skip'))
     fig = go.Figure(data=[mesh, plane] + labels)
     fig.update_layout(
         title=title,
@@ -414,7 +416,7 @@ if mode == "GAN Generator":
                 )
 
                 # 3D extrusion button
-                if col.button(f"Show 3D Extrusion {i+1}"):
+                if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_gan_{i}"):
                     # pixel_area is area per pixel in m^2 -> meters per pixel side
                     m_per_pixel = math.sqrt(pixel_area)
                     img_w_px, img_h_px = img.size
@@ -606,7 +608,7 @@ elif mode == "Real-Time Sensor Dashboard":
                         mime="image/png",
                     )
 
-                    if col.button(f"Show 3D Extrusion {i+1}"):
+                    if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_captured_{i}"):
                         m_per_pixel = math.sqrt(pixel_area)
                         img_w_px, img_h_px = img.size
                         img_display_w = img_w_px * m_per_pixel
