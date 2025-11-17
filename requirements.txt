@@ -22,7 +22,7 @@ sentencepiece
 diffusers
 
 # 3D AND GEOMETRY (Use unversioned to find compatible wheels)
-open3d
+open3d==0.18.0
 trimesh
 
 # WEB BACKEND
