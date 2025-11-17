@@ -693,42 +693,51 @@ elif mode == "Real-Time Sensor Dashboard":
                         col.info("No main building contour found to extrude for 3D.")
 
 elif mode == "Optimized Layout":
+
+    st.header("Rule-Based Optimized Layout Generator")
+
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
-        num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=7,
-                                    help="This count includes kitchen and bathroom.")
+        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3, step=1)
 
-    st.markdown(
-        "<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>",
-        unsafe_allow_html=True
-    )
+    st.markdown("Select Plot Shape:")
+    plot_shape = st.radio("Plot Shape", ["Rectangle"], horizontal=True)
 
-    property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
-    plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
+    plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+    plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=12.0)
 
-    colW, colH = st.columns(2)
-    with colW:
-        plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
-    with colH:
-        plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+    if st.button("Generate Optimized Layout", type="primary", use_container_width=True):
 
-    if st.button("Generate Optimized Layout"):
-        with st.spinner("Generating layout..."):
-            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
-            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
-            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
-            fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
-            st.pyplot(fig)
+        # Create semantic layout (room area distribution)
+        layout, msg = generate_semantic_layout(total_area, num_rooms_input,
+                                               property_type=None,
+                                               plot_shape=plot_shape,
+                                               plot_w=plot_w,
+                                               plot_h=plot_h)
+        rooms = layout.get("rooms", [])
+        st.subheader("Optimized Room Area Distribution")
+        for r in rooms:
+            st.write(f"**{r['name'].title()}** → {r['area']} m²")
 
-            # 3D visualization for optimized layout - uses simple prism logic
-            prisms = layout_to_prisms(layout, plot_w, plot_h, ceiling_height=CEILING_HEIGHT)
-            if prisms:
-                fig3d = plot_layout_3d(prisms, plot_w, plot_h, title=f"{property_type} 3D Layout")
-                st.markdown("### 3D Visualization")
-                st.plotly_chart(fig3d, use_container_width=True)
+        # 2D PLOT
+        st.markdown("### 2D Layout Preview")
+        fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
+        st.pyplot(fig2d, use_container_width=True)
+
+        # Convert 2D → 3D (prisms)
+        prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
+
+        if not prisms:
+            st.error("Failed to generate 3D geometry.")
+        else:
+            fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
+            st.markdown("### 3D Layout Visualization")
+            st.plotly_chart(fig3d, use_container_width=True)
+
+        st.success("Optimized Layout Generated Successfully!")
+
 
 st.sidebar.header("Arch-Ai-Tex Chatbot")
 
