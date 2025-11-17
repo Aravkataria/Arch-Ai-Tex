@@ -193,7 +193,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             break
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\\n{r['area']} m²"
 {r['area']} m²", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
