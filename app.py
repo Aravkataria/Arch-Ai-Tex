@@ -14,14 +14,12 @@ from PIL import Image
 import requests
 import time
 import plotly.graph_objects as go
+import pyvista as pv
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
 
-# -------------------------
-# Constants & Model classes
-# -------------------------
 DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
@@ -51,9 +49,6 @@ class DCGAN_Generator(nn.Module):
         out = self.fc(z).view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
-# -------------------------
-# Load models
-# -------------------------
 @st.cache_resource
 def load_models():
     rf_model = None
@@ -81,9 +76,6 @@ def load_models():
 
 RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
-# -------------------------
-# Utility functions
-# -------------------------
 def predict_dwelling_type(area, bedrooms, rf_model):
     if rf_model is None:
         return "Unknown Type (RF model missing)"
@@ -193,18 +185,11 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             break
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        # safe f-string: do not include problematic unicode directly
-        label_text = f"{r['name']}\\n{r['area']} m^2"
-{r['area']} m^2"
-        ax.text(x + w / 2, y + h / 2, label_text, ha='center', va='center', fontsize=8)
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m^2", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
     ax.set_title(title)
     return fig
-
-# -------------------------
-# 3D visualization helpers
-# -------------------------
 
 def rect_to_prism_vertices(x, y, w, h, z0=0.0, height=3.0):
     v0 = (x, y, z0)
@@ -217,12 +202,12 @@ def rect_to_prism_vertices(x, y, w, h, z0=0.0, height=3.0):
     v7 = (x, y + h, z0 + height)
     verts = [v0, v1, v2, v3, v4, v5, v6, v7]
     faces = [
-        (0,1,2),(0,2,3),  # bottom
-        (4,6,5),(4,7,6),  # top
-        (0,4,5),(0,5,1),  # side1
-        (1,5,6),(1,6,2),  # side2
-        (2,6,7),(2,7,3),  # side3
-        (3,7,4),(3,4,0)   # side4
+        (0,1,2),(0,2,3),
+        (4,6,5),(4,7,6),
+        (0,4,5),(0,5,1),
+        (1,5,6),(1,6,2),
+        (2,6,7),(2,7,3),
+        (3,7,4),(3,4,0)
     ]
     return verts, faces
 
@@ -278,64 +263,159 @@ def layout_to_prisms(layout, plot_w, plot_h, ceiling_height=3.0):
     return prisms
 
 
-def plot_layout_3d(prisms, plot_w, plot_h, title="3D Layout"):
-    mesh = build_mesh_from_prisms(prisms)
-    if mesh is None:
+def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
+    if isinstance(prisms_or_meshes, list) and all(isinstance(p, dict) for p in prisms_or_meshes):
+        mesh_data = [build_mesh_from_prisms(prisms_or_meshes)]
+        labels = []
+        for p in prisms_or_meshes:
+            cx = p['x'] + p['w']/2
+            cy = p['y'] + p['h']/2
+            labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']} ({p['area']} m^2)"], textposition="middle center", hoverinfo='skip'))
+    else:
+        mesh_data = prisms_or_meshes
+        labels = []
+        
+    if mesh_data is None or all(m is None for m in mesh_data):
         fig = go.Figure()
         fig.update_layout(title="No 3D geometry to show")
         return fig
+    
+    max_z = prisms_or_meshes[0].get('height', 3.0) if prisms_or_meshes and isinstance(prisms_or_meshes[0], dict) else 3.0
+    
     plane = go.Scatter3d(
         x=[0, plot_w, plot_w, 0, 0],
         y=[0, 0, plot_h, plot_h, 0],
         z=[0, 0, 0, 0, 0],
         mode='lines',
         line=dict(color='black', width=2),
-        hoverinfo='skip'
+        hoverinfo='skip',
+        name='Boundary'
     )
-    labels = []
-    for p in prisms:
-        cx = p['x'] + p['w']/2
-        cy = p['y'] + p['h']/2
-        # create a simple label showing name and area
-        text_label = f"{p.get('name','room')} ({p.get('area',0)} m^2)"
-        labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[text_label], textposition="middle center", hoverinfo='skip'))
-    fig = go.Figure(data=[mesh, plane] + labels)
+    
+    fig = go.Figure(data=mesh_data + [plane] + labels)
+    
     fig.update_layout(
         title=title,
         scene=dict(
             xaxis=dict(title='X (m)', backgroundcolor="rgb(240,240,240)", showgrid=False, zeroline=False),
             yaxis=dict(title='Y (m)', backgroundcolor="rgb(240,240,240)", showgrid=False, zeroline=False),
-            zaxis=dict(title='Z (m)', backgroundcolor="rgb(250,250,250)", showgrid=False, zeroline=False),
+            zaxis=dict(title='Z (m)', backgroundcolor="rgb(250,250,250)", showgrid=False, zeroline=False, range=[0, max_z * 1.1]),
             aspectmode='manual',
             aspectratio=dict(x=plot_w/(plot_h if plot_h>0 else 1), y=1.0, z=0.5)
         ),
-        margin=dict(l=0, r=0, t=30, b=0)
+        margin=dict(l=0, r=0, t=30, b=0),
+        showlegend=False
     )
     return fig
 
+def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=3.0, wall_thickness_m=0.15):
+    mesh_elements = []
+    
+    WALL_COLOR = 'rgb(200, 200, 200)'
+    FLOOR_COLOR = 'rgb(255, 255, 255)' 
+    
+    for cnt in contours:
+        epsilon = 0.005 * cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        
+        pts_m = [(p[0][0] * m_per_pixel, p[0][1] * m_per_pixel) for p in approx]
+        
+        if len(pts_m) < 3:
+            continue
+            
+        
+        pts_2d = np.array(pts_m, dtype=np.float32)
+        
+        try:
+            floor_x = [p[0] for p in pts_m]
+            floor_y = [p[1] for p in pts_m]
+            floor_z = [0.0] * len(pts_m)
 
-def segmentation_to_prisms(seg_img_pil, img_display_w, img_display_h, ceiling_height=3.0, min_area_px=200):
+            floor_i, floor_j, floor_k = [], [], []
+            for i in range(1, len(pts_m) - 1):
+                floor_i.append(0)
+                floor_j.append(i)
+                floor_k.append(i + 1)
+            
+            floor_mesh = go.Mesh3d(
+                x=floor_x, y=floor_y, z=floor_z,
+                i=floor_i, j=floor_j, k=floor_k,
+                opacity=0.9,
+                color=FLOOR_COLOR,
+                name='Floor'
+            )
+            mesh_elements.append(floor_mesh)
+            
+        except Exception as e:
+            st.warning(f"Failed to triangulate floor for a room. {e}")
+            continue
+
+        wall_verts = []
+        wall_faces_i, wall_faces_j, wall_faces_k = [], [], []
+        vert_offset = 0
+
+        for i in range(len(pts_m)):
+            p1_x, p1_y = pts_m[i]
+            p2_x, p2_y = pts_m[(i + 1) % len(pts_m)]
+
+            v0 = (p1_x, p1_y, 0.0)
+            v1 = (p2_x, p2_y, 0.0)
+            v2 = (p2_x, p2_y, ceiling_height)
+            v3 = (p1_x, p1_y, ceiling_height)
+
+            current_verts = [v0, v1, v2, v3]
+            wall_verts.extend(current_verts)
+
+            wall_faces_i.append(vert_offset + 0)
+            wall_faces_j.append(vert_offset + 1)
+            wall_faces_k.append(vert_offset + 2)
+            
+            wall_faces_i.append(vert_offset + 0)
+            wall_faces_j.append(vert_offset + 2)
+            wall_faces_k.append(vert_offset + 3)
+
+            vert_offset += len(current_verts)
+
+        if wall_verts:
+            wall_x, wall_y, wall_z = zip(*wall_verts)
+            wall_mesh = go.Mesh3d(
+                x=list(wall_x), y=list(wall_y), z=list(wall_z),
+                i=wall_faces_i, j=wall_faces_j, k=wall_faces_k,
+                opacity=0.9,
+                color=WALL_COLOR,
+                name='Wall'
+            )
+            mesh_elements.append(wall_mesh)
+
+    return mesh_elements
+
+
+def segmentation_to_contour_meshes(seg_img_pil, img_display_w, img_display_h, ceiling_height=3.0, min_area_px=200):
     seg_np = np.array(seg_img_pil.convert("RGB"))
     gray = cv2.cvtColor(seg_np, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 5, 255, cv2.THRESH_BINARY)
+    
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h_px, w_px = gray.shape
-    prisms = []
-    for cnt in contours:
-        area_px = cv2.contourArea(cnt)
-        if area_px < min_area_px:
-            continue
-        x, y, w, h = cv2.boundingRect(cnt)
-        x_m = (x / w_px) * img_display_w
-        y_m = (y / h_px) * img_display_h
-        w_m = (w / w_px) * img_display_w
-        h_m = (h / h_px) * img_display_h
-        prisms.append({'x': x_m, 'y': y_m, 'w': w_m, 'h': h_m, 'height': ceiling_height, 'name': 'room', 'area': round((w_m * h_m),2)})
-    return prisms
+    
+    if not contours:
+        return []
 
-# -------------------------
-# Styling & Header
-# -------------------------
+    m_per_pixel_w = img_display_w / w_px
+    m_per_pixel_h = img_display_h / h_px
+    m_per_pixel = (m_per_pixel_w + m_per_pixel_h) / 2 
+    
+    all_meshes = []
+    
+    largest_contour = max(contours, key=cv2.contourArea) if contours else None
+
+    if cv2.contourArea(largest_contour) < min_area_px:
+        return []
+        
+    all_meshes.extend(build_contour_mesh_3d([largest_contour], m_per_pixel, ceiling_height))
+        
+    return all_meshes
+
 st.markdown("""
 <style>
 .stButton>button {
@@ -369,18 +449,12 @@ with col2:
 
 st.markdown("---")
 
-# -------------------------
-# Main mode selector
-# -------------------------
 mode = st.radio(
     "Select Mode:",
     ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
     horizontal=True
 )
 
-# -------------------------
-# Mode: GAN Generator
-# -------------------------
 if mode == "GAN Generator":
     col_len, col_wid = st.columns(2)
     with col_len:
@@ -403,10 +477,6 @@ if mode == "GAN Generator":
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
         st.markdown("Generated Floorplans:")
         cols = st.columns(3)
-        # container to hold generated 3D figures in session state
-        if 'gan_3d_figs' not in st.session_state:
-            st.session_state['gan_3d_figs'] = {}
-
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
                 img = floor_plan_images[i]
@@ -422,49 +492,31 @@ if mode == "GAN Generator":
                     mime="image/png",
                 )
 
-                # 3D extrusion button -> when pressed, save fig to session_state and show below
-                btn_key = f"extrude_gan_{i}"
-                if col.button(f"Show 3D Extrusion {i+1}", key=btn_key):
-                    # pixel_area is area per pixel in m^2 -> meters per pixel side
-                    m_per_pixel = math.sqrt(pixel_area)
+                if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_gan_{i}"):
                     img_w_px, img_h_px = img.size
-                    img_display_w = img_w_px * m_per_pixel
-                    img_display_h = img_h_px * m_per_pixel
-                    prisms = segmentation_to_prisms(seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height)
-                    if prisms:
-                        fig3d = plot_layout_3d(prisms, img_display_w, img_display_h, title=f"Plan {i+1} 3D")
-                        # store plotly figure JSON to session state so it survives rerun
-                        st.session_state['gan_3d_figs'][btn_key] = fig3d.to_dict()
+                    img_display_w = house_length
+                    img_display_h = house_width
+                    
+                    mesh_elements = segmentation_to_contour_meshes(
+                        seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height
+                    )
+                    
+                    if mesh_elements:
+                        fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
+                        col.plotly_chart(fig3d, use_container_width=True)
                     else:
-                        st.session_state['gan_3d_figs'].pop(btn_key, None)
-                        st.info("No sizable rooms found to extrude.")
+                        col.info("No main building contour found to extrude.")
 
-        # After the columns, display any saved 3D figures for GAN plans
-        if st.session_state.get('gan_3d_figs'):
-            st.markdown("### 3D Extrusions (GAN)")
-            for key, fig_dict in st.session_state['gan_3d_figs'].items():
-                try:
-                    fig = go.Figure(fig_dict)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception:
-                    # if fig restoration fails, remove it
-                    st.session_state['gan_3d_figs'].pop(key, None)
-
-# -------------------------
-# Mode: Real-Time Sensor Dashboard
-# -------------------------
 elif mode == "Real-Time Sensor Dashboard":
     st.header("Cloud Sensor Dashboard")
     st.markdown("Fetch ultrasonic readings one at a time and confirm whether it’s **Length** or **Breadth**.")
 
-    # Initialize session states
     for key in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
         if key not in st.session_state:
             st.session_state[key] = None
 
     st.divider()
 
-    # --- CASE 1: Nothing yet — only show Get Sensor Data ---
     if st.session_state.length is None and st.session_state.breadth is None and st.session_state.last_distance is None:
         if st.button("Get Sensor Data", use_container_width=True):
             try:
@@ -481,12 +533,10 @@ elif mode == "Real-Time Sensor Dashboard":
             except Exception as e:
                 st.error(f"Error: {e}")
 
-    # --- CASE 2: Have a new distance waiting to assign ---
     elif st.session_state.last_distance is not None:
         st.subheader("Last Measured Distance")
         st.write(f"{st.session_state.last_distance} cm")
 
-        # --- Subcase 2A: No dimensions set yet (Both Length and Breadth options available) ---
         if st.session_state.length is None and st.session_state.breadth is None:
             col1, col2 = st.columns([1, 1])
             with col1:
@@ -502,7 +552,6 @@ elif mode == "Real-Time Sensor Dashboard":
                     st.session_state.last_distance = None
                     st.rerun()
 
-        # --- Subcase 2B: Length is set, waiting for Breadth (Show Breadth button full width) ---
         elif st.session_state.length is not None and st.session_state.breadth is None:
             if st.button("Set as Breadth", use_container_width=True):
                 st.session_state.breadth = st.session_state.last_distance
@@ -510,7 +559,6 @@ elif mode == "Real-Time Sensor Dashboard":
                 st.session_state.last_distance = None
                 st.rerun()
 
-        # --- Subcase 2C: Breadth is set, waiting for Length (Show Length button full width) ---
         elif st.session_state.breadth is not None and st.session_state.length is None:
             if st.button("Set as Length", use_container_width=True):
                 st.session_state.length = st.session_state.last_distance
@@ -523,7 +571,6 @@ elif mode == "Real-Time Sensor Dashboard":
             st.info("Last value cleared.")
             st.rerun()
 
-    # --- CASE 3: One dimension set, waiting for the other ---
     elif (st.session_state.length is not None) ^ (st.session_state.breadth is not None):
         st.info("Now get the other dimension.")
         if st.button("Get Sensor Data", use_container_width=True):
@@ -541,7 +588,6 @@ elif mode == "Real-Time Sensor Dashboard":
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        # show reset for whichever one is set
         if st.session_state.length is not None:
             if st.button("Reset Entered Length", use_container_width=True):
                 st.session_state.length = None
@@ -555,7 +601,6 @@ elif mode == "Real-Time Sensor Dashboard":
                 st.info("Breadth cleared.")
                 st.rerun()
 
-    # --- CASE 4: Both captured ---
     elif st.session_state.length and st.session_state.breadth:
         st.success("Both Length and Breadth captured successfully.")
 
@@ -591,7 +636,6 @@ elif mode == "Real-Time Sensor Dashboard":
         st.divider()
         st.subheader("Generate Floorplan from Captured Dimensions")
 
-        # Convert from cm → m
         length_m = st.session_state.length * 0.01
         breadth_m = st.session_state.breadth * 0.01
         area_m2 = length_m * breadth_m
@@ -630,20 +674,20 @@ elif mode == "Real-Time Sensor Dashboard":
                     )
 
                     if col.button(f"Show 3D Extrusion {i+1}", key=f"extrude_captured_{i}"):
-                        m_per_pixel = math.sqrt(pixel_area)
-                        img_w_px, img_h_px = img.size
-                        img_display_w = img_w_px * m_per_pixel
-                        img_display_h = img_h_px * m_per_pixel
-                        prisms = segmentation_to_prisms(seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height)
-                        if prisms:
-                            fig3d = plot_layout_3d(prisms, img_display_w, img_display_h, title=f"Plan {i+1} 3D")
+                        
+                        img_display_w = length_m
+                        img_display_h = breadth_m
+                        
+                        mesh_elements = segmentation_to_contour_meshes(
+                            seg_img, img_display_w, img_display_h, ceiling_height=ceiling_height
+                        )
+                        
+                        if mesh_elements:
+                            fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
                             col.plotly_chart(fig3d, use_container_width=True)
                         else:
-                            col.info("No sizable rooms found to extrude.")
+                            col.info("No main building contour found to extrude.")
 
-# -------------------------
-# Mode: Optimized Layout
-# -------------------------
 elif mode == "Optimized Layout":
     colA, colB = st.columns(2)
     with colA:
@@ -667,7 +711,6 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-            # 3D visualization for optimized layout
             prisms = layout_to_prisms(layout, plot_w, plot_h, ceiling_height=ceiling_height)
             if prisms:
                 fig3d = plot_layout_3d(prisms, plot_w, plot_h, title=f"{property_type} 3D Layout")
@@ -695,7 +738,6 @@ else:
         except Exception as e:
             return f"Error calling LLM API: {e}"
 
-    # Init chat history with a system prompt tuned to architecture/design
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [
             {"role": "system", "content": (
@@ -704,26 +746,17 @@ else:
             )}
         ]
 
-    # Render existing chat messages (skip system message)
     for msg in st.session_state.chat_history[1:]:
         with st.sidebar.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # Chat input
     user_input = st.sidebar.chat_input("Ask anything about Architecture or Interior Design…")
 
     if user_input:
-        # append user message and display it
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.sidebar.chat_message("user").write(user_input)
 
-        # call model with full conversation
         answer = ask_groq(st.session_state.chat_history)
 
-        # append and display assistant reply
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         st.sidebar.chat_message("assistant").write(answer)
-
-
-# End of file
-# https://esp32-fastapi-server-uh47.onrender.com/data
