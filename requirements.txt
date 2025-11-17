@@ -1,31 +1,19 @@
-streamlit==1.39.0
-numpy==1.26.4
-pandas==2.2.3
-Pillow==10.4.0
-joblib==1.4.2
-matplotlib==3.9.2
-scikit-learn==1.5.2
-
-# CPU-only PyTorch
-torch==2.1.0+cpu
-torchvision==0.16.1+cpu
-torchaudio==2.1.1+cpu
-
-# OpenCV
-opencv-python-headless==4.8.1.78
-
-# Diffusion / Transformers
-diffusers
+streamlit==1.39.0 
+numpy==1.26.4 
+pandas==2.2.3 
+Pillow==10.4.0 
+joblib==1.4.2 
+matplotlib==3.9.2 
+scikit-learn==1.5.2 
+torch
+torchvision
+torchaudio 
+opencv-python-headless
+diffusers 
 transformers==4.45.0
 sentencepiece
-protobuf
-
-# Web server
+protobuf 
 fastapi
 uvicorn
-
-# 3D visualizations (optional, use fallback if fails)
 streamlit-3d==0.1.12
-
-# LLM API
 groq
