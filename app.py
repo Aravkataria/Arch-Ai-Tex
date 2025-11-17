@@ -236,7 +236,7 @@ st.markdown("---")
 # -------------------------
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard", "HiddenChatBot"],
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
     horizontal=True
 )
 
@@ -481,109 +481,124 @@ elif mode == "Optimized Layout":
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
+            
+# ------------------ FLOATING CHATBOT BACKEND ------------------
 
 import streamlit as st
 
-# ---- Chatbot session state ----
-if "chat_history_widget" not in st.session_state:
-    st.session_state.chat_history_widget = []
+# Session state to store chat inside widget
+if "floating_chat_history" not in st.session_state:
+    st.session_state.floating_chat_history = []
 
-# ---- Function to run chatbot ----
-def run_floating_chatbot():
-    user_input = st.text_input("You:", key="floating_chat_input")
+def floating_chatbot():
+    user_msg = st.text_input("Ask something...", key="floating_chat_input")
 
     if st.button("Send", key="floating_chat_send"):
-        if user_input.strip() != "":
-            st.session_state.chat_history_widget.append(("user", user_input))
+        if user_msg.strip() != "":
+            # Add user message
+            st.session_state.floating_chat_history.append(("user", user_msg))
 
-            # --- Your chatbot reply here ---
-            bot_response = f"Bot: You said → {user_input}"
-            st.session_state.chat_history_widget.append(("bot", bot_response))
+            # --------------------------
+            # 🔥 Replace this with your real Groq chatbot response
+            bot_reply = f"You said: {user_msg}"
+            # --------------------------
 
-    # Display chat history
-    for role, msg in st.session_state.chat_history_widget:
+            # Add bot reply
+            st.session_state.floating_chat_history.append(("bot", bot_reply))
+
+    # Render chat visually
+    for role, text in st.session_state.floating_chat_history:
         if role == "user":
-            st.markdown(f"""
-            <div style='text-align:left; background:#e0f7fa; padding:8px 12px; 
-                        border-radius:10px; margin:6px; width:90%;'>
-                <b>You:</b> {msg}
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="background:#d0f0ff; padding:8px 12px;
+                            margin:6px; border-radius:8px; width:90%;">
+                    <b>You:</b> {text}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         else:
-            st.markdown(f"""
-            <div style='text-align:left; background:#fff3e0; padding:8px 12px; 
-                        border-radius:10px; margin:6px; width:90%;'>
-                {msg}
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="background:#fff3cd; padding:8px 12px;
+                            margin:6px; border-radius:8px; width:90%;">
+                    {text}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-# ---- Floating widget HTML/CSS ----
+# ------------------ FLOATING CHATBOT WIDGET ------------------
+
 st.markdown("""
 <style>
-/* Floating Button (Left Bottom) */
-#chatbot-launcher {
+/* Floating Button on Left */
+#chat-launcher {
     position: fixed;
-    left: 20px;
+    left: 18px;
     bottom: 20px;
     width: 65px;
     height: 65px;
     background-color: #4CAF50;
     color: white;
     border-radius: 50%;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 32px;
     cursor: pointer;
-    z-index: 99999;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 9999;
 }
 
 /* Chat window */
-#chatbot-panel {
+#chat-box {
     position: fixed;
-    left: 20px;
+    left: 18px;
     bottom: 100px;
     width: 350px;
     height: 500px;
     background: white;
+    padding: 12px;
     border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-    padding: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     display: none;
-    z-index: 999999;
     overflow-y: auto;
+    z-index: 99999;
 }
 
-/* Close button */
-#chatbot-close {
+/* Close Button */
+#chat-close {
     position: absolute;
+    right: 12px;
     top: 10px;
-    right: 14px;
     font-size: 20px;
     cursor: pointer;
 }
 </style>
 
-<div id="chatbot-launcher" onclick="chat_open()">💬</div>
+<div id="chat-launcher" onclick="openChat()">💬</div>
 
-<div id="chatbot-panel">
-    <div id="chatbot-close" onclick="chat_close()">✖</div>
+<div id="chat-box">
+    <div id="chat-close" onclick="closeChat()">✖</div>
     <h4>ChatBot</h4>
-    <div id="chatbotContainer"></div>
+    <div id="chat-widget-container"></div>
 </div>
 
 <script>
-function chat_open(){
-    document.getElementById('chatbot-panel').style.display = 'block';
+function openChat() {
+    document.getElementById("chat-box").style.display = "block";
 }
-function chat_close(){
-    document.getElementById('chatbot-panel').style.display = 'none';
+function closeChat() {
+    document.getElementById("chat-box").style.display = "none";
 }
 </script>
 """, unsafe_allow_html=True)
 
+# Render chatbot content
 with st.container():
-    run_floating_chatbot()
+    floating_chatbot()
+
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
