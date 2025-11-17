@@ -671,7 +671,7 @@ elif mode == "Optimized Layout":
 
 st.sidebar.header("Arch-Ai-Tex Chatbot")
 
-api_key = ""
+api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
 
 if not api_key:
     st.sidebar.error("LLM API key (ARCH_AI_TEX_CHATBOT) is not provided. Chatbot is running in mock mode.")
