@@ -483,57 +483,68 @@ elif mode == "Optimized Layout":
             st.pyplot(fig)
 
 # -------------------------
-# Mode: ChatBot (integrated)
+# Floating Chatbot Widget
 # -------------------------
-elif mode == "ChatBot":
-    st.header("AEC / BIM Chatbot")
 
-    api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
-    if not api_key:
-        st.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
-    else:
-        def ask_groq(messages):
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            data = {
-                "model": "llama-3.1-8b-instant",
-                "messages": messages,
-                "temperature": 0.2,
-            }
-            try:
-                resp = requests.post(url, json=data, headers=headers, timeout=30)
-                resp.raise_for_status()
-                return resp.json()["choices"][0]["message"]["content"]
-            except Exception as e:
-                return f"Error calling LLM API: {e}"
+# Hidden container to render the chatbot internally
+with st.container():
+    st.markdown("""
+    <style>
+    /* Floating Chatbot Button */
+    .chatbot-btn {
+        position: fixed;
+        left: 20px;
+        bottom: 20px;
+        width: 65px;
+        height: 65px;
+        background-color: #4CAF50;
+        border-radius: 50%;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        z-index: 9999;
+        transition: all 0.2s;
+    }
+    .chatbot-btn:hover {
+        transform: scale(1.05);
+        background-color: #45a049;
+    }
 
-        # Init chat history with a system prompt tuned to BIM/AEC
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
-                {"role": "system", "content": (
-                    "You are an expert AEC/BIM architect and engineer. "
-                    "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
-                )}
-            ]
+    .chatbot-window {
+        position: fixed;
+        left: 20px;
+        bottom: 100px;
+        width: 350px;
+        height: 500px;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        padding: 15px;
+        z-index: 99999;
+        overflow: hidden;
+        display: none;
+    }
 
-        # Render existing chat messages (skip system message)
-        for msg in st.session_state.chat_history[1:]:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+    .chatbot-close {
+        position: absolute;
+        top: 10px;
+        right: 12px;
+        font-size: 22px;
+        cursor: pointer;
+    }
+    </style>
 
-        # Chat input
-        user_input = st.chat_input("Ask anything about BIM, Architecture or Interior Design…")
+    <div class="chatbot-btn" onclick="document.querySelector('.chatbot-window').style.display = 'block'">
+        💬
+    </div>
 
-        if user_input:
-            # append user message and display it
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            st.chat_message("user").write(user_input)
-
-            # call model with full conversation
-            answer = ask_groq(st.session_state.chat_history)
-
-            # append and display assistant reply
-            st.session_state.chat_history.append({"role": "assistant", "content": answer})
-            st.chat_message("assistant").write(answer)
+    <div class="chatbot-window">
+        <div class="chatbot-close" onclick="document.querySelector('.chatbot-window').style.display = 'none'">✖</div>
+        <h4>Arch-Ai-Tex ChatBot</h4>
+        <iframe src="/?mode=ChatBot" width="100%" height="90%" style="border:none;"></iframe>
+    </div>
+    """, unsafe_allow_html=True)
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
