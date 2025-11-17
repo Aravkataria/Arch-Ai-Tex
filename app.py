@@ -485,13 +485,6 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-
-# -------------------------
-# Mode: ChatBot (integrated)
-# -------------------------
-# -------------------------
-# Permanent Sidebar ChatBot
-# -------------------------
 st.sidebar.header("Arch-Ai-Tex Chatbot")
 
 api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
