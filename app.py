@@ -193,7 +193,7 @@ def plot_layout(layout, plot_w, plot_h, title="Layout"):
             break
         rect = plt.Rectangle((x, y), w, h, facecolor=colors[i % len(colors)], edgecolor='black', linewidth=1.1)
         ax.add_patch(rect)
-        ax.text(x + w / 2, y + h / 2, f"{r['name']}\\n{r['area']} m^2", ha='center', va='center', fontsize=8)
+        ax.text(x + w / 2, y + h / 2, f"{r['name']}\n{r['area']} m^2", ha='center', va='center', fontsize=8)
         x += w + pad
         row_h = max(row_h, h)
     ax.set_title(title)
@@ -293,7 +293,7 @@ def plot_layout_3d(prisms, plot_w, plot_h, title="3D Layout"):
     for p in prisms:
         cx = p['x'] + p['w']/2
         cy = p['y'] + p['h']/2
-        labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']}
+        labels.append(go.Scatter3d(x=[cx], y=[cy], z=[p['height'] + 0.05], mode='text', text=[f"{p['name']} ({p['area']} m^2)"]}
 {p['area']} m^2"], textposition="middle center", hoverinfo='skip'))
     fig = go.Figure(data=[mesh, plane] + labels)
     fig.update_layout(
