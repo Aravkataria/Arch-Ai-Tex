@@ -482,162 +482,108 @@ elif mode == "Optimized Layout":
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-# =============================================================
-# FLOATING CHATBOT WIDGET (Always Visible, Works in All Modes)
-# =============================================================
-
 import streamlit as st
-import requests
 
-# ---------- LLM CALL ----------
-api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
+# ---- Chatbot session state ----
+if "chat_history_widget" not in st.session_state:
+    st.session_state.chat_history_widget = []
 
-def ask_groq(messages):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    data = {
-        "model": "llama-3.1-8b-instant",
-        "messages": messages,
-        "temperature": 0.2,
-    }
-    try:
-        resp = requests.post(url, json=data, headers=headers, timeout=30)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"Error calling LLM API: {e}"
+# ---- Function to run chatbot ----
+def run_floating_chatbot():
+    user_input = st.text_input("You:", key="floating_chat_input")
 
+    if st.button("Send", key="floating_chat_send"):
+        if user_input.strip() != "":
+            st.session_state.chat_history_widget.append(("user", user_input))
 
-# ---------- Chatbot Session Initialization ----------
-if "floating_chat" not in st.session_state:
-    st.session_state.floating_chat = [
-        {"role": "system", "content": 
-         "You are an expert AEC/BIM architect. Give short, accurate, professional answers."}
-    ]
+            # --- Your chatbot reply here ---
+            bot_response = f"Bot: You said → {user_input}"
+            st.session_state.chat_history_widget.append(("bot", bot_response))
 
-# ---------- HTML + CSS + JS for Floating Widget ----------
-chatbot_css = """
+    # Display chat history
+    for role, msg in st.session_state.chat_history_widget:
+        if role == "user":
+            st.markdown(f"""
+            <div style='text-align:left; background:#e0f7fa; padding:8px 12px; 
+                        border-radius:10px; margin:6px; width:90%;'>
+                <b>You:</b> {msg}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style='text-align:left; background:#fff3e0; padding:8px 12px; 
+                        border-radius:10px; margin:6px; width:90%;'>
+                {msg}
+            </div>
+            """, unsafe_allow_html=True)
+
+# ---- Floating widget HTML/CSS ----
+st.markdown("""
 <style>
-#floating-chatbot {
+/* Floating Button (Left Bottom) */
+#chatbot-launcher {
     position: fixed;
-    bottom: 20px;
     left: 20px;
-    z-index: 9999;
+    bottom: 20px;
+    width: 65px;
+    height: 65px;
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 50%;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 32px;
+    cursor: pointer;
+    z-index: 99999;
 }
-.chat-window {
-    width: 320px;
-    height: 420px;
+
+/* Chat window */
+#chatbot-panel {
+    position: fixed;
+    left: 20px;
+    bottom: 100px;
+    width: 350px;
+    height: 500px;
     background: white;
     border-radius: 12px;
-    padding: 10px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    padding: 15px;
     display: none;
-    flex-direction: column;
+    z-index: 999999;
+    overflow-y: auto;
 }
-.chat-header {
-    background: #4CAF50;
-    color: white;
-    padding: 8px;
-    border-radius: 8px;
-    text-align: center;
-    margin-bottom: 5px;
-}
-.chat-toggle-btn {
-    background: #4CAF50;
-    color: white;
-    font-size: 16px;
-    border-radius: 50%;
-    width: 55px;
-    height: 55px;
-    text-align: center;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+
+/* Close button */
+#chatbot-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 20px;
     cursor: pointer;
 }
 </style>
-"""
 
-chatbot_html = """
-<div id="floating-chatbot">
-    <div class="chat-toggle-btn" onclick="toggleChat()">💬</div>
-    <div id="chat-window" class="chat-window">
-        <div class="chat-header">AEC ChatBot</div>
-        <div id="chat-messages" style="flex: 1; overflow-y: auto; font-size:14px;"></div>
+<div id="chatbot-launcher" onclick="chat_open()">💬</div>
 
-        <input id="chat-input" type="text" placeholder="Ask something..." style="
-            width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
-        <button onclick="sendMessage()" style="
-            margin-top:5px; width: 100%; padding: 8px; border-radius: 6px;
-            background:#4CAF50; color:white; border:none;">Send</button>
-    </div>
+<div id="chatbot-panel">
+    <div id="chatbot-close" onclick="chat_close()">✖</div>
+    <h4>ChatBot</h4>
+    <div id="chatbotContainer"></div>
 </div>
 
 <script>
-function toggleChat() {
-    var chat = document.getElementById("chat-window");
-    chat.style.display = (chat.style.display === "flex") ? "none" : "flex";
+function chat_open(){
+    document.getElementById('chatbot-panel').style.display = 'block';
 }
-
-// Send message to Streamlit Python
-function sendMessage() {
-    var input = document.getElementById("chat-input");
-    var text = input.value;
-    if (!text) return;
-
-    // Clear input
-    input.value = "";
-
-    // Send message through Streamlit event
-    window.parent.postMessage(
-        { isStreamlitMessage: true, type: "streamlit:chatbot_input", text: text },
-        "*"
-    );
+function chat_close(){
+    document.getElementById('chatbot-panel').style.display = 'none';
 }
 </script>
-"""
+""", unsafe_allow_html=True)
 
-st.markdown(chatbot_css + chatbot_html, unsafe_allow_html=True)
-
-# ---------- JS EVENT LISTENER ----------
-def process_floating_chat():
-    if "last_chat_message" in st.session_state:
-        user_msg = st.session_state.last_chat_message
-        st.session_state.floating_chat.append({"role": "user", "content": user_msg})
-        assistant_msg = ask_groq(st.session_state.floating_chat)
-        st.session_state.floating_chat.append({"role": "assistant", "content": assistant_msg})
-
-        # Send message back to JS to display in the chatbox
-        st.markdown(f"""
-        <script>
-            var chatBox = window.parent.document.getElementById("chat-messages");
-            chatBox.innerHTML += "<p><b>You:</b> {user_msg}</p>";
-            chatBox.innerHTML += "<p><b>AI:</b> {assistant_msg}</p>";
-            chatBox.scrollTop = chatBox.scrollHeight;
-        </script>
-        """, unsafe_allow_html=True)
-
-        del st.session_state.last_chat_message
-
-
-# Listen for messages from JS
-streamlit_js = """
-<script>
-window.addEventListener("message", (event) => {
-    if (event.data.type === "streamlit:chatbot_input") {
-        window.parent.postMessage(
-            { isStreamlitMessage: true, type: "streamlit:setComponentValue", value: event.data.text },
-            "*"
-        );
-    }
-});
-</script>
-"""
-st.markdown(streamlit_js, unsafe_allow_html=True)
-
-# Hidden input for capturing JS messages
-msg = st.text_input("hidden_chat_input", key="chat_input_hidden", label_visibility="hidden")
-if msg:
-    st.session_state.last_chat_message = msg
-    process_floating_chat()
-    st.session_state.chat_input_hidden = ""
+with st.container():
+    run_floating_chatbot()
 
 # https://esp32-fastapi-server-uh47.onrender.com/data
