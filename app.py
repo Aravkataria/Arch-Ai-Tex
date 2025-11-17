@@ -782,3 +782,5 @@ else:
 
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         st.sidebar.chat_message("assistant").write(answer)
+
+#https://esp32-fastapi-server-uh47.onrender.com/
