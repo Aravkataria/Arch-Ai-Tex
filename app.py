@@ -228,14 +228,14 @@ st.markdown("""
 # --- LAYOUT CHANGE: Use 2 columns for the main layout ---
 # col_chatbot: Narrow column on the left (ratio 1)
 # col_main_app: Wider column for the rest of the application (ratio 4)
-col_chatbot, col_main_app = st.columns([0.5, 4.5])
+col_chatbot, col_main_app = st.columns([1.5, 3.5])
 
 
 # -------------------------
 # ChatBot (NOW PERMANENTLY ON LEFT)
 # -------------------------
 with col_chatbot:
-    st.header("AEC / BIM Chatbot")
+    st.header("Chatbot")
 
     api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
     if not api_key:
