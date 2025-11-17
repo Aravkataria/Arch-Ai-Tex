@@ -23,3 +23,5 @@ uvicorn
 streamlit-3d==0.1.12
 
 groq
+
+open3d
