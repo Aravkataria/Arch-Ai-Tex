@@ -6,22 +6,26 @@ joblib==1.4.2
 matplotlib==3.9.2
 scikit-learn==1.5.2
 
+# CPU-only PyTorch
 torch==2.1.0+cpu
 torchvision==0.16.1+cpu
 torchaudio==2.1.1+cpu
 
+# OpenCV
 opencv-python-headless==4.8.1.78
 
+# Diffusion / Transformers
 diffusers
 transformers==4.45.0
 sentencepiece
 protobuf
 
+# Web server
 fastapi
 uvicorn
 
+# 3D visualizations (optional, use fallback if fails)
 streamlit-3d==0.1.12
 
+# LLM API
 groq
-
-open3d==0.17.0
