@@ -28,8 +28,8 @@ st.markdown("""
 /* ADD SPACING between Chatbot and main UI components */
 #chatbot-container {
     margin-top: 40px !important;      /* space ABOVE chatbot */
-    padding-top: 20px !important;     /* internal padding */
-    border-top: 2px solid #e0e0e0;    /* subtle separator line */
+    padding-top: 40px !important;     /* internal padding */
+    border-top: 20px solid #e0e0e0;    /* subtle separator line */
 }
 
 /* Optional: more breathing room between sections */
