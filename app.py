@@ -18,26 +18,17 @@ warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.markdown("""
 <style>
-/* Main app width */
-.block-container {
-    max-width: 1000px !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
+/* Add padding inside columns to create a clean gap */
+div[data-testid="column"]:nth-of-type(1) {
+    padding-right: 50px;   /* gap between chatbot and generator */
 }
 
-/* ADD SPACING between Chatbot and main UI components */
-#chatbot-container {
-    margin-top: 40px !important;      /* space ABOVE chatbot */
-    padding-top: 40px !important;     /* internal padding */
-    border-top: 20px solid #e0e0e0;    /* subtle separator line */
-}
-
-/* Optional: more breathing room between sections */
-section[data-testid="stVerticalBlock"] {
-    margin-bottom: 25px;
+div[data-testid="column"]:nth-of-type(2) {
+    padding-left: 50px;    /* spacing inside right panel */
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # -------------------------
