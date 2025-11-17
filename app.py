@@ -692,215 +692,36 @@ elif mode == "Real-Time Sensor Dashboard":
                     else:
                         col.info("No main building contour found to extrude for 3D.")
 
-###############################################
-# OPTIMIZED LAYOUT MODE (NO COMMENTS)
-###############################################
-
-CEILING_HEIGHT = 3.0
-
-def generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h):
-    base_rooms = ["kitchen", "bathroom"]
-    extra_room_count = max(0, num_rooms - len(base_rooms))
-    extra_rooms = [f"bedroom_{i+1}" for i in range(extra_room_count)]
-    rooms = base_rooms + extra_rooms
-
-    room_min_area = {
-        "kitchen": 8,
-        "bathroom": 5
-    }
-
-    areas = []
-    assigned_min_area = 0
-
-    for room in rooms:
-        if room in room_min_area:
-            areas.append(room_min_area[room])
-            assigned_min_area += room_min_area[room]
-        else:
-            areas.append(10)
-            assigned_min_area += 10
-
-    remaining = max(0, total_area - assigned_min_area)
-    extra_per_room = remaining / len(rooms)
-    areas = [round(a + extra_per_room, 2) for a in areas]
-
-    num_bedrooms = len([r for r in rooms if "bedroom" in r])
-
-    layout = {
-        "rooms": rooms,
-        "areas": areas,
-        "num_bedrooms": num_bedrooms,
-        "total_area": total_area,
-        "plot_w": plot_w,
-        "plot_h": plot_h,
-        "property_type": property_type,
-        "plot_shape": plot_shape
-    }
-
-    return layout, None
-
-
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
-def plot_layout(layout, plot_w, plot_h, title="Optimized Layout"):
-    rooms = layout["rooms"]
-    areas = layout["areas"]
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.set_title(title, fontsize=16)
-
-    x = 1
-    y = plot_h - 1
-    max_w = plot_w - 2
-    max_h = plot_h - 2
-
-    area_sum = sum(areas)
-    current_y = y
-
-    colors = ["#c2e0c6", "#c5d9f2", "#f2c2c2", "#f7e6a1", "#d7c2f2",
-              "#c2f2e9", "#f2d2c2", "#c2d3f2"]
-
-    for i, (room, area) in enumerate(zip(rooms, areas)):
-        height = (area / area_sum) * max_h * 1.5
-        height = min(height, max_h)
-
-        color = colors[i % len(colors)]
-
-        rect = patches.Rectangle(
-            (x, current_y - height),
-            max_w,
-            height,
-            linewidth=2,
-            edgecolor='black',
-            facecolor=color
-        )
-        ax.add_patch(rect)
-
-        ax.text(
-            x + max_w / 2,
-            current_y - height / 2,
-            f"{room}\n{area} m²",
-            fontsize=12,
-            ha="center",
-            va="center"
-        )
-
-        current_y -= height + 0.5
-
-    ax.set_xlim(0, plot_w)
-    ax.set_ylim(0, plot_h)
-    ax.set_aspect('equal')
-    ax.axis("off")
-
-    return fig
-
-
-def layout_to_prisms(layout, plot_w, plot_h, ceiling_height=3):
-    rooms = layout["rooms"]
-    areas = layout["areas"]
-
-    prisms = []
-    x = 0
-    y = 0
-    max_w = plot_w
-    max_h = plot_h
-
-    area_sum = sum(areas)
-    current_y = max_h
-
-    for room, area in zip(rooms, areas):
-        height = (area / area_sum) * max_h * 1.5
-        height = min(height, max_h)
-
-        prism = {
-            "name": room,
-            "x": x,
-            "y": current_y - height,
-            "z": 0,
-            "w": max_w,
-            "h": height,
-            "depth": ceiling_height
-        }
-        prisms.append(prism)
-
-        current_y -= height + 0.3
-
-    return prisms
-
-
-import plotly.graph_objects as go
-
-def plot_layout_3d(prisms, plot_w, plot_h, title="3D Layout"):
-    fig = go.Figure()
-
-    for prism in prisms:
-        x, y, z = prism["x"], prism["y"], prism["z"]
-        w, h, d = prism["w"], prism["h"], prism["depth"]
-
-        fig.add_trace(go.Mesh3d(
-            x=[x, x+w, x+w, x, x, x+w, x+w, x],
-            y=[y, y, y+h, y+h, y, y, y+h, y+h],
-            z=[z, z, z, z, z+d, z+d, z+d, z+d],
-            opacity=0.5,
-            color="lightblue"
-        ))
-
-    fig.update_layout(
-        title=title,
-        scene=dict(
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
-            zaxis=dict(visible=False)
-        ),
-        height=600
-    )
-
-    return fig
-
-
 elif mode == "Optimized Layout":
-
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
         num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-
     st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
-
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
-
     colW, colH = st.columns(2)
     with colW:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
+    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
 
     if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
-
-            layout, _ = generate_semantic_layout(
-                total_area,
-                num_rooms_input,
-                property_type,
-                plot_shape,
-                plot_w,
-                plot_h
-            )
-
-            st.markdown("### 2D Layout")
+            layout, _ = generate_semantic_layout(total_area, num_rooms_input, property_type, plot_shape, plot_w, plot_h)
+            dwelling_type = predict_dwelling_type(total_area, layout["num_bedrooms"], RF_MODEL)
+            st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
 
-            st.markdown("### 3D Visualization")
+            # 3D visualization for optimized layout - uses simple prism logic
             prisms = layout_to_prisms(layout, plot_w, plot_h, ceiling_height=CEILING_HEIGHT)
-
             if prisms:
-                fig3d = plot_layout_3d(prisms, plot_w, plot_h, f"{property_type} 3D Layout")
+                fig3d = plot_layout_3d(prisms, plot_w, plot_h, title=f"{property_type} 3D Layout")
+                st.markdown("### 3D Visualization")
                 st.plotly_chart(fig3d, use_container_width=True)
-
 
 st.sidebar.header("Arch-Ai-Tex Chatbot")
 
