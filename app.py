@@ -14,7 +14,6 @@ from PIL import Image
 import requests
 import time
 import plotly.graph_objects as go
-import pyvista as pv
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
