@@ -13,10 +13,55 @@ import warnings
 from PIL import Image
 import requests
 import time
+import open3d as o3d
+
 
 warnings.filterwarnings("ignore", message="missing ScriptRunContext")
 
 st.set_page_config(page_title="Arch-Ai-Tex", layout="centered")
+# -------------------------
+# 3D Floorplan Conversion
+# -------------------------
+def floorplan_to_3d(segmented_img, height=3.0):
+    """
+    Convert segmented 2D floorplan (PIL Image) to a simple 3D mesh.
+    - Walls are extruded wherever the image is dark/black.
+    """
+    img_gray = np.array(segmented_img.convert("L"))
+    h, w = img_gray.shape
+    vertices = []
+    faces = []
+
+    for y in range(h):
+        for x in range(w):
+            if img_gray[y, x] < 128:  # wall pixel
+                base_idx = len(vertices)
+                vertices.extend([
+                    [x, y, 0],
+                    [x+1, y, 0],
+                    [x+1, y+1, 0],
+                    [x, y+1, 0],
+                    [x, y, height],
+                    [x+1, y, height],
+                    [x+1, y+1, height],
+                    [x, y+1, height],
+                ])
+                cube_faces = [
+                    [0,1,2], [0,2,3],
+                    [4,5,6], [4,6,7],
+                    [0,1,5], [0,5,4],
+                    [1,2,6], [1,6,5],
+                    [2,3,7], [2,7,6],
+                    [3,0,4], [3,4,7],
+                ]
+                faces.extend([[idx+base_idx for idx in face] for face in cube_faces])
+    if not vertices:
+        return None
+    mesh = o3d.geometry.TriangleMesh()
+    mesh.vertices = o3d.utility.Vector3dVector(np.array(vertices))
+    mesh.triangles = o3d.utility.Vector3iVector(np.array(faces))
+    mesh.compute_vertex_normals()
+    return mesh
 
 # -------------------------
 # Constants & Model classes
@@ -247,18 +292,8 @@ mode = st.radio(
 # Mode: GAN Generator
 # -------------------------
 if mode == "GAN Generator":
-    col_len, col_wid = st.columns(2)
-    with col_len:
-        house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
-    with col_wid:
-        house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
-    area_m2 = house_length * house_width
-    if area_m2 < 100:
-        area_m2 = 100
-    area_sqft = area_m2 * 10.7639
-    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m² (≈ {area_sqft:.0f} sq ft)**")
-    bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
-    denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+    # ... (input elements: house_length, house_width, area_m2, bedrooms, denoise_option)
+
     if st.button("Generate Floorplans", type="primary", use_container_width=True):
         dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
             GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
@@ -266,6 +301,8 @@ if mode == "GAN Generator":
         st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
         st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m²")
         st.markdown("Generated Floorplans:")
+
+        # --- THIS is where you replace/insert the block ---
         cols = st.columns(3)
         for i, col in enumerate(cols):
             if i < len(floor_plan_images):
@@ -275,12 +312,33 @@ if mode == "GAN Generator":
                 img.save(buf, format="PNG")
                 col.image(img, caption=f"Plan {i+1}", use_column_width=True)
                 col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+
+                # Download 2D floorplan
                 col.download_button(
                     label=f"Download Plan {i+1}",
                     data=buf.getvalue(),
                     file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
                     mime="image/png",
                 )
+
+                # Show & Download 3D model
+                if col.button(f"Show 3D Model {i+1}"):
+                    mesh = floorplan_to_3d(seg_img)  # segmented image
+                    if mesh:
+                        temp_path = f"/tmp/floorplan_{i+1}.ply"
+                        o3d.io.write_triangle_mesh(temp_path, mesh)
+                        st.success("3D model generated!")
+                        st.download_button(
+                            label="Download 3D Model (.ply)",
+                            data=open(temp_path, "rb").read(),
+                            file_name=f"floorplan_{i+1}.ply",
+                            mime="application/octet-stream"
+                        )
+                        st.write("Preview in Open3D GUI: Open downloaded file in Open3D or Blender")
+                    else:
+                        st.warning("Failed to generate 3D mesh from this floorplan.")
+        # --- END of inserted block ---
+
 
 # -------------------------
 # Mode: Real-Time Sensor Dashboard
