@@ -6,11 +6,11 @@ joblib==1.4.2
 matplotlib==3.9.2
 scikit-learn==1.5.2
 
-torch
-torchvision
-torchaudio
+torch==2.1.0+cpu
+torchvision==0.16.1+cpu
+torchaudio==2.1.1+cpu
 
-opencv-python-headless
+opencv-python-headless==4.8.1.78
 
 diffusers
 transformers==4.45.0
@@ -24,4 +24,4 @@ streamlit-3d==0.1.12
 
 groq
 
-open3d==0.17.0A
+open3d==0.17.0
