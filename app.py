@@ -703,7 +703,7 @@ elif mode == "Optimized Layout":
         num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3, step=1)
 
     st.markdown("Select Plot Shape:")
-    plot_shape = st.radio("Plot Shape", ["Rectangle","square"], horizontal=True)
+    plot_shape = st.radio("Plot Shape", ["Rectangle"], horizontal=True)
 
     plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=12.0)
@@ -737,6 +737,7 @@ elif mode == "Optimized Layout":
             st.plotly_chart(fig3d, use_container_width=True)
 
         st.success("Optimized Layout Generated Successfully!")
+
 
 
 st.sidebar.header("Arch-Ai-Tex Chatbot")
