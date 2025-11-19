@@ -23,7 +23,7 @@ DEVICE = torch.device("cpu")
 LATENT_DIM = 100
 CHANNELS = 1
 IMG_SIZE = 256
-CEILING_HEIGHT = 3.0  # Fixed as requested
+CEILING_HEIGHT = 3.0  
 
 class DCGAN_Generator(nn.Module):
     @staticmethod
