@@ -694,7 +694,7 @@ elif mode == "Real-Time Sensor Dashboard":
 
 elif mode == "Optimized Layout":
 
-    st.header("Rule-Based Optimized Layout Generator")
+    st.header("Optimized Layout Generator")
 
     colA, colB = st.columns(2)
     with colA:
