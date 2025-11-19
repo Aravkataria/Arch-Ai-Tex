@@ -740,7 +740,7 @@ elif mode == "Optimized Layout":
 
 
 
-st.sidebar.header("Arch-Ai-bot")
+st.sidebar.header("Arch-Ai-Bot")
 
 api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
 if not api_key:
