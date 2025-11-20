@@ -742,13 +742,13 @@ elif mode == "Optimized Layout":
 
 st.sidebar.header("Arch-Ai-Bot")
 
-api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
+api_key = st.secrets.get("ARCH_AI_BOT")
 if not api_key:
-    st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
+    st.sidebar.error("ARCH_AI_BOT not found in Streamlit secrets. Add it in app settings.")
 else:
     def ask_groq(messages):
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {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}", "Content-Type": "application/json"}
         data = {
             "model": "llama-3.1-8b-instant",
             "messages": messages,
