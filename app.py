@@ -743,7 +743,7 @@ elif mode == "Optimized Layout":
 st.sidebar.header("Arch-Ai-Bot")
 
 I=1
-if I ==1::
+if I ==1:
     def ask_groq(messages):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {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}", "Content-Type": "application/json"}
