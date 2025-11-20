@@ -743,7 +743,7 @@ elif mode == "Optimized Layout":
 st.sidebar.header("Arch-Ai-Bot")
 
 api_key = st.secrets.get("ARCH_AI_BOT")
-if not api_key:
+elif not api_key:
     st.sidebar.error("ARCH_AI_BOT not found in Streamlit secrets. Add it in app settings.")
 else:
     def ask_groq(messages):
