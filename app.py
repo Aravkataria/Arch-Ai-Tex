@@ -742,7 +742,7 @@ elif mode == "Optimized Layout":
 
 st.sidebar.header("Arch-Ai-Bot")
 
-api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
+api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT1")
 if not api_key:
     st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
 else:
