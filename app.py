@@ -742,9 +742,9 @@ elif mode == "Optimized Layout":
 
 st.sidebar.header("Arch-Ai-Bot")
 
-api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT1")
+api_key = st.secrets.get("ARCH_AI_TEX_CHATBOT")
 if not api_key:
-    st.sidebar.error("ARCH_AI_TEX_CHATBOT1 not found in Streamlit secrets. Add it in app settings.")
+    st.sidebar.error("ARCH_AI_TEX_CHATBOT not found in Streamlit secrets. Add it in app settings.")
 else:
     def ask_groq(messages):
         url = "https://api.groq.com/openai/v1/chat/completions"
