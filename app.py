@@ -746,7 +746,7 @@ I=1
 if I ==1:
     def ask_groq(messages):
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {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}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         data = {
             "model": "llama-3.1-8b-instant",
             "messages": messages,
