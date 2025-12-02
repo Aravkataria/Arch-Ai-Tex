@@ -321,6 +321,7 @@ st.markdown("---")
 mode = st.radio("Select Model:", ["GAN Generator", "Optimized Layout"], horizontal=True)
 
 if mode == "GAN Generator":
+    st.header("GAN Generator")
     col_len, col_wid = st.columns(2)
     with col_len:
         house_length = st.number_input("Enter House Length (m)", min_value=1.0, value=10.0, step=0.5)
