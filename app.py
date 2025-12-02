@@ -258,37 +258,25 @@ if mode == "GAN Generator":
                     mime="image/png",
                 )
 
-else:
+elif mode == "Optimized Layout":
+    st.header("Optimized Layout Generator")
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
     with colB:
         num_rooms = st.number_input("Enter Total Number of Rooms", min_value=1, value=3)
-        
     st.markdown("<p style='font-size:13px; color:gray;'>Note: The total number of rooms includes the kitchen and bathroom.</p>", unsafe_allow_html=True)
-
     property_type = st.selectbox("Property Type", ["Apartment", "Villa", "Bungalow"])
     plot_shape = st.selectbox("Plot Shape", ["Square", "Rectangular"])
-
     colW, colH = st.columns(2)
     with colW:
         plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     with colH:
         plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=10.0)
-
-    if st.button("Generate Optimized Layout", type="primary", use_container_width=True):
+    if st.button("Generate Optimized Layout"):
         with st.spinner("Generating layout..."):
-            layout, _ = generate_semantic_layout(
-                total_area, 
-                num_rooms, 
-                property_type, 
-                plot_shape, 
-                plot_w, 
-                plot_h
-            )
-            
+            layout, _ = generate_semantic_layout(total_area, num_rooms, property_type, plot_shape, plot_w, plot_h)
             dwelling_type = predict_dwelling_type(total_area, num_rooms, RF_MODEL)
             st.success(f"Predicted Dwelling Type: **{dwelling_type}**")
-            
             fig = plot_layout(layout, plot_w, plot_h, f"{property_type} Layout")
             st.pyplot(fig)
