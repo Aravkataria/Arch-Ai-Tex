@@ -53,32 +53,56 @@ class DCGAN_Generator(nn.Module):
         out = out.view(z.size(0), 512, 16, 16)
         return self.gen(out)
 
+class DCGAN_Generator(nn.Module):
+    @staticmethod
+    def block(in_f, out_f):
+        return nn.Sequential(
+            nn.BatchNorm2d(in_f),
+            nn.ConvTranspose2d(in_f, out_f, 4, 2, 1),
+            nn.ReLU(True)
+        )
 
-# ---------------------------
-# Model loading (cached)
-# ---------------------------
+    def __init__(self, latent_dim=100, channels=1):
+        super().__init__()
+        self.fc = nn.Linear(latent_dim, 512 * 16 * 16)
+        self.gen = nn.Sequential(
+            DCGAN_Generator.block(512, 256),
+            DCGAN_Generator.block(256, 128),
+            DCGAN_Generator.block(128, 64),
+            nn.ConvTranspose2d(64, channels, 4, 2, 1),
+            nn.Tanh()
+        )
+
+    def forward(self, z):
+        out = self.fc(z).view(z.size(0), 512, 16, 16)
+        return self.gen(out)
+
 @st.cache_resource
 def load_models():
     rf_model = None
     generator = DCGAN_Generator().to(DEVICE)
-    if os.path.exists(RF_MODEL_PATH):
+    try:
+        rf_model = joblib.load("room_predictor.joblib")
+    except Exception:
+        rf_model = None
+    loaded = False
+    for fname in ("generator_epoch100.pth", "generator_epoch_100.pth", "generator.pth"):
         try:
-            rf_model = joblib.load(RF_MODEL_PATH)
+            state_dict = torch.load(fname, map_location=DEVICE)
+            generator.load_state_dict(state_dict, strict=False)
+            loaded = True
+            break
+        except FileNotFoundError:
+            continue
         except Exception as e:
-            st.warning(f"Could not load RF model `{RF_MODEL_PATH}`: {e}")
-            rf_model = None
-    if os.path.exists(GEN_WEIGHTS_PATH):
-        try:
-            state_dict = torch.load(GEN_WEIGHTS_PATH, map_location=DEVICE)
-            generator.load_state_dict(state_dict)
-        except Exception as e:
-            st.warning(f"Could not load generator weights `{GEN_WEIGHTS_PATH}`: {e}")
-    else:
-        st.info(f"Generator weights not found at `{GEN_WEIGHTS_PATH}` — using randomly initialized generator.")
+            st.warning(f"Error loading generator model {fname}: {e}")
+            continue
+    if not loaded:
+        st.error("GAN generator weights not found or failed to load. The output will likely be noise.")
     generator.eval()
-    return rf_model, generator
+    return rf_model, generator, None
 
-RF_MODEL, GAN_MODEL = load_models()
+RF_MODEL, GAN_MODEL, SEG_MODEL = load_models()
 
 # ---------------------------
 # Prediction + generation
