@@ -113,32 +113,6 @@ def generate_final_plans(generator, area, bedrooms, count=3, denoise=False, rf_m
     return dwelling_type, images, pixel_area
 
 
-def apply_segmentation(image, num_rooms):
-    # simple connected components segmentation (2D only)
-    if image.mode != "L":
-        img_cv = np.array(image.convert("L"))
-    else:
-        img_cv = np.array(image)
-    _, thresh = cv2.threshold(img_cv, 150, 255, cv2.THRESH_BINARY_INV)
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, 8, cv2.CV_32S)
-    seg_rgb = np.zeros((*img_cv.shape, 3), dtype=np.uint8)
-    room_colors = [
-        (255, 199, 107),
-        (130, 202, 157),
-        (174, 199, 232),
-        (255, 152, 150),
-        (197, 176, 213),
-        (255, 237, 111),
-    ]
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] < 50:
-            continue
-        color_index = (i - 1) % len(room_colors)
-        color = room_colors[color_index]
-        seg_rgb[labels == i] = color
-    seg_pil = Image.fromarray(seg_rgb).resize(image.size)
-    return seg_pil
-
 
 def generate_semantic_layout(total_area, num_rooms_input):
     total_area = float(total_area)
@@ -297,40 +271,4 @@ elif mode == "Optimized Layout":
         st.pyplot(fig2d, use_container_width=True)
 
         st.success("Optimized Layout Generated Successfully!")
-
-
-# End of cleaned app.py
-
-# --- Segmentation Model Integration ---
-import torchvision.transforms as T
-import torchvision.models.segmentation as models
-
-@st.cache_resource
-def load_segmentation_model():
-    model = models.deeplabv3_resnet50(weights="DEFAULT").to(DEVICE)
-    model.eval()
-    transform = T.Compose([
-        T.Resize((256, 256)),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    return model, transform
-
-SEG_MODEL, SEG_TRANSFORM = load_segmentation_model()
-
-st.markdown("---")
-st.subheader("Segmentation Model (Optional)")
-upload_seg = st.file_uploader("Upload an input image for segmentation", type=["png","jpg","jpeg"])
-
-if upload_seg:
-    img = Image.open(upload_seg).convert("RGB")
-    st.image(img, caption="Original Image", use_container_width=True)
-
-    inp = SEG_TRANSFORM(img).unsqueeze(0).to(DEVICE)
-    with torch.no_grad():
-        output = SEG_MODEL(inp)["out"]
-    pred = output.argmax(1).squeeze().cpu().numpy().astype(np.uint8)
-
-    seg_color = cv2.applyColorMap((pred * 10).astype(np.uint8), cv2.COLORMAP_JET)
-    st.image(seg_color, caption="Segmentation Output", use_column_width=True)
 
