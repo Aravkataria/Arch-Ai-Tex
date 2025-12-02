@@ -25,11 +25,6 @@ CHANNELS = 1
 IMG_SIZE = 256
 CEILING_HEIGHT = 3.0  
 
-# === SENSOR SERVER CONFIG ===
-# To disable/remove external chatbot/sensor server integration set this to None.
-# If you want to re-enable later, set to e.g. "https://your-server.com"
-SENSOR_SERVER_URL = None
-
 class DCGAN_Generator(nn.Module):
     @staticmethod
     def block(in_f, out_f):
@@ -279,14 +274,14 @@ def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
     else:
         mesh_data = prisms_or_meshes
         labels = []
-        
+
     if mesh_data is None or all(m is None for m in mesh_data):
         fig = go.Figure()
         fig.update_layout(title="No 3D geometry to show")
         return fig
-    
+
     max_z = CEILING_HEIGHT
-    
+
     plane = go.Scatter3d(
         x=[0, plot_w, plot_w, 0, 0],
         y=[0, 0, plot_h, plot_h, 0],
@@ -296,9 +291,9 @@ def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
         hoverinfo='skip',
         name='Boundary'
     )
-    
+
     fig = go.Figure(data=mesh_data + [plane] + labels)
-    
+
     fig.update_layout(
         title=title,
         scene=dict(
@@ -315,22 +310,22 @@ def plot_layout_3d(prisms_or_meshes, plot_w, plot_h, title="3D Layout"):
 
 def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, wall_thickness_m=0.15):
     mesh_elements = []
-    
+
     WALL_COLOR = 'rgb(200, 200, 200)'
     FLOOR_COLOR = 'rgb(255, 255, 255)' 
-    
+
     for cnt in contours:
         epsilon = 0.005 * cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, epsilon, True)
-        
+
         pts_m = [(p[0][0] * m_per_pixel, p[0][1] * m_per_pixel) for p in approx]
-        
+
         if len(pts_m) < 3:
             continue
-            
-        
+
+
         pts_2d = np.array(pts_m, dtype=np.float32)
-        
+
         try:
             floor_x = [p[0] for p in pts_m]
             floor_y = [p[1] for p in pts_m]
@@ -341,7 +336,7 @@ def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, 
                 floor_i.append(0)
                 floor_j.append(i)
                 floor_k.append(i + 1)
-            
+
             floor_mesh = go.Mesh3d(
                 x=floor_x, y=floor_y, z=floor_z,
                 i=floor_i, j=floor_j, k=floor_k,
@@ -350,7 +345,7 @@ def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, 
                 name='Floor'
             )
             mesh_elements.append(floor_mesh)
-            
+
         except Exception as e:
             st.warning(f"Failed to triangulate floor for a room. {e}")
             continue
@@ -374,7 +369,7 @@ def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, 
             wall_faces_i.append(vert_offset + 0)
             wall_faces_j.append(vert_offset + 1)
             wall_faces_k.append(vert_offset + 2)
-            
+
             wall_faces_i.append(vert_offset + 0)
             wall_faces_j.append(vert_offset + 2)
             wall_faces_k.append(vert_offset + 3)
@@ -399,26 +394,26 @@ def segmentation_to_contour_meshes(seg_img_pil, img_display_w, img_display_h, ce
     seg_np = np.array(seg_img_pil.convert("RGB"))
     gray = cv2.cvtColor(seg_np, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 5, 255, cv2.THRESH_BINARY)
-    
+
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h_px, w_px = gray.shape
-    
+
     if not contours:
         return []
 
     m_per_pixel_w = img_display_w / w_px
     m_per_pixel_h = img_display_h / h_px
     m_per_pixel = (m_per_pixel_w + m_per_pixel_h) / 2 
-    
+
     all_meshes = []
-    
+
     largest_contour = max(contours, key=cv2.contourArea) if contours else None
 
     if cv2.contourArea(largest_contour) < min_area_px:
         return []
-        
+
     all_meshes.extend(build_contour_mesh_3d([largest_contour], m_per_pixel, ceiling_height))
-        
+
     return all_meshes
 
 st.markdown("""
@@ -456,7 +451,266 @@ st.markdown("---")
 
 mode = st.radio(
     "Select Mode:",
-    ["GAN Generator", "Optimized Layout", "# Create semantic layout (room area distribution)
+    ["GAN Generator", "Optimized Layout", "Real-Time Sensor Dashboard"],
+    horizontal=True
+)
+
+if mode == "GAN Generator":
+    col_len, col_wid = st.columns(2)
+    with col_len:
+        house_length = st.number_input("Enter House Length (m)", min_value=10.0, value=50.0, step=1.0)
+    with col_wid:
+        house_width = st.number_input("Enter House Width (m)", min_value=10.0, value=30.0, step=1.0)
+    area_m2 = house_length * house_width
+    if area_m2 < 100:
+        area_m2 = 100
+    area_sqft = area_m2 * 10.7639
+    st.markdown(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)**")
+    bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
+    denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+    # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+
+    if st.button("Generate Floorplans", type="primary", use_container_width=True):
+        dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
+            GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+        )
+        st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
+        st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
+        st.markdown("Generated Floorplans:")
+        cols = st.columns(3)
+        for i, col in enumerate(cols):
+            if i < len(floor_plan_images):
+                img = floor_plan_images[i]
+                seg_img = apply_segmentation(img, bedrooms)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                col.image(img, caption=f"Plan {i+1}", use_column_width=True)
+                col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                col.download_button(
+                    label=f"Download Plan {i+1}",
+                    data=buf.getvalue(),
+                    file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                    mime="image/png",
+                )
+
+                # 3D visualization is now automatic
+                img_display_w = house_length
+                img_display_h = house_width
+
+                mesh_elements = segmentation_to_contour_meshes(
+                    seg_img, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT
+                )
+
+                if mesh_elements:
+                    fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
+                    col.markdown("---")
+                    col.markdown(f"**3D View of Plan {i+1}**")
+                    col.plotly_chart(fig3d, use_container_width=True)
+                else:
+                    col.info("No main building contour found to extrude for 3D.")
+
+elif mode == "Real-Time Sensor Dashboard":
+    st.header("Cloud Sensor Dashboard")
+    st.markdown("Fetch ultrasonic readings one at a time and confirm whether it’s **Length** or **Breadth**.")
+
+    for key in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
+        if key not in st.session_state:
+            st.session_state[key] = None
+
+    st.divider()
+
+    if st.session_state.length is None and st.session_state.breadth is None and st.session_state.last_distance is None:
+        if st.button("Get Sensor Data", use_container_width=True):
+            try:
+                r = requests.get("https://esp32-fastapi-server-uh47.onrender.com/data", timeout=5)
+                if r.status_code == 200:
+                    d = r.json().get("data", {})
+                    st.session_state.pir = d.get("pir")
+                    st.session_state.ir = d.get("ir")
+                    st.session_state.last_distance = d.get("ultrasonic")
+                    if st.session_state.last_distance is None:
+                        st.warning("No ultrasonic data found.")
+                else:
+                    st.error(f"Server responded with {r.status_code}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    elif st.session_state.last_distance is not None:
+        st.subheader("Last Measured Distance")
+        st.write(f"{st.session_state.last_distance} cm")
+
+        if st.session_state.length is None and st.session_state.breadth is None:
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("Set as Length", use_container_width=True):
+                    st.session_state.length = st.session_state.last_distance
+                    st.session_state.last_set = "length"
+                    st.session_state.last_distance = None
+                    st.rerun()
+            with col2:
+                if st.button("Set as Breadth", use_container_width=True):
+                    st.session_state.breadth = st.session_state.last_distance
+                    st.session_state.last_set = "breadth"
+                    st.session_state.last_distance = None
+                    st.rerun()
+
+        elif st.session_state.length is not None and st.session_state.breadth is None:
+            if st.button("Set as Breadth", use_container_width=True):
+                st.session_state.breadth = st.session_state.last_distance
+                st.session_state.last_set = "breadth"
+                st.session_state.last_distance = None
+                st.rerun()
+
+        elif st.session_state.breadth is not None and st.session_state.length is None:
+            if st.button("Set as Length", use_container_width=True):
+                st.session_state.length = st.session_state.last_distance
+                st.session_state.last_set = "length"
+                st.session_state.last_distance = None
+                st.rerun()
+
+        if st.button("Reset Last Value", use_container_width=True):
+            st.session_state.last_distance = None
+            st.info("Last value cleared.")
+            st.rerun()
+
+    elif (st.session_state.length is not None) ^ (st.session_state.breadth is not None):
+        st.info("Now get the other dimension.")
+        if st.button("Get Sensor Data", use_container_width=True):
+            try:
+                r = requests.get("https://esp32-fastapi-server-uh47.onrender.com/data", timeout=5)
+                if r.status_code == 200:
+                    d = r.json().get("data", {})
+                    st.session_state.pir = d.get("pir")
+                    st.session_state.ir = d.get("ir")
+                    st.session_state.last_distance = d.get("ultrasonic")
+                    if st.session_state.last_distance is None:
+                        st.warning("No ultrasonic data found.")
+                else:
+                    st.error(f"Server responded with {r.status_code}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+        if st.session_state.length is not None:
+            if st.button("Reset Entered Length", use_container_width=True):
+                st.session_state.length = None
+                st.session_state.last_set = None
+                st.info("Length cleared.")
+                st.rerun()
+        if st.session_state.breadth is not None:
+            if st.button("Reset Entered Breadth", use_container_width=True):
+                st.session_state.breadth = None
+                st.session_state.last_set = None
+                st.info("Breadth cleared.")
+                st.rerun()
+
+    elif st.session_state.length and st.session_state.breadth:
+        st.success("Both Length and Breadth captured successfully.")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Reset Latest", use_container_width=True):
+                if st.session_state.last_set == "length":
+                    st.session_state.length = None
+                else:
+                    st.session_state.breadth = None
+                st.info("Latest entry cleared.")
+                st.rerun()
+        with col2:
+            if st.button("Reset All", use_container_width=True):
+                for k in ["length", "breadth", "last_distance", "pir", "ir", "last_set"]:
+                    st.session_state[k] = None
+                st.info("All cleared.")
+                st.rerun()
+        st.divider()
+    st.divider()
+    st.subheader("Current Measurements")
+    st.write(f"Length: {st.session_state.length if st.session_state.length else '—'} cm")
+    st.write(f"Breadth: {st.session_state.breadth if st.session_state.breadth else '—'} cm")
+
+    if st.session_state.pir is not None or st.session_state.ir is not None:
+        st.divider()
+        st.subheader("Motion & Obstacle Sensors")
+        pir_status = "Motion Detected" if st.session_state.pir else "No Motion"
+        ir_status = "Obstacle Detected" if not st.session_state.ir else "Clear Path"
+        st.write(f"PIR: {pir_status}")
+        st.write(f"IR: {ir_status}")
+
+    if st.session_state.length and st.session_state.breadth:
+        st.divider()
+        st.subheader("Generate Floorplan from Captured Dimensions")
+
+        length_m = st.session_state.length * 0.01
+        breadth_m = st.session_state.breadth * 0.01
+        area_m2 = length_m * breadth_m
+        area_sqft = area_m2 * 10.7639
+
+        st.write(f"**Final Dimensions:** {length_m:.2f} m × {breadth_m:.2f} m")
+        st.write(f"**Calculated Total Area:** {area_m2:.2f} m^2 (≈ {area_sqft:.0f} sq ft)")
+
+        bedrooms = st.number_input("Enter Number of Bedrooms", min_value=1, value=3, step=1)
+        denoise_option = st.checkbox("Apply Denoiser (OpenCV)", value=False)
+        # Ceiling Height input removed, fixed at CEILING_HEIGHT = 3.0
+
+        if st.button("Generate Floorplans", type="primary", use_container_width=True):
+            dwelling_type, floor_plan_images, pixel_area = generate_final_plans(
+                GAN_MODEL, area_m2, bedrooms, count=3, denoise=denoise_option, rf_model=RF_MODEL
+            )
+
+            st.subheader(f"Predicted Dwelling Type: {dwelling_type}")
+            st.markdown(f"**Area to Pixel Ratio:** 1 pixel ≈ {pixel_area:.4f} m^2")
+            st.markdown("Generated Floorplans:")
+
+            cols = st.columns(3)
+            for i, col in enumerate(cols):
+                if i < len(floor_plan_images):
+                    img = floor_plan_images[i]
+                    seg_img = apply_segmentation(img, bedrooms)
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    col.image(img, caption=f"Plan {i+1}", use_column_width=True)
+                    col.image(seg_img, caption=f"Segmented Plan {i+1}", use_column_width=True)
+                    col.download_button(
+                        label=f"Download Plan {i+1}",
+                        data=buf.getvalue(),
+                        file_name=f"plan_{i+1}_Area{int(area_sqft)}sqft_Beds{bedrooms}.png",
+                        mime="image/png",
+                    )
+
+                    # 3D visualization is now automatic
+                    img_display_w = length_m
+                    img_display_h = breadth_m
+
+                    mesh_elements = segmentation_to_contour_meshes(
+                        seg_img, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT
+                    )
+
+                    if mesh_elements:
+                        fig3d = plot_layout_3d(mesh_elements, img_display_w, img_display_h, title=f"Plan {i+1} 3D (Contour-Based)")
+                        col.markdown("---")
+                        col.markdown(f"**3D View of Plan {i+1}**")
+                        col.plotly_chart(fig3d, use_container_width=True)
+                    else:
+                        col.info("No main building contour found to extrude for 3D.")
+
+elif mode == "Optimized Layout":
+
+    st.header("Optimized Layout Generator")
+
+    colA, colB = st.columns(2)
+    with colA:
+        total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
+    with colB:
+        num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3, step=1)
+
+    st.markdown("Select Plot Shape:")
+    plot_shape = st.radio("Plot Shape", ["Rectangle",'square'], horizontal=True)
+
+    plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
+    plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=12.0)
+
+    if st.button("Generate Optimized Layout", type="primary", use_container_width=True):
+
+        # Create semantic layout (room area distribution)
         layout, msg = generate_semantic_layout(total_area, num_rooms_input,
                                                property_type=None,
                                                plot_shape=plot_shape,
@@ -483,3 +737,51 @@ mode = st.radio(
             st.plotly_chart(fig3d, use_container_width=True)
 
         st.success("Optimized Layout Generated Successfully!")
+
+
+
+st.sidebar.header("Arch-Ai-Bot")
+
+api_key = st.secrets.get("ARCH_AI_BOT")
+if not api_key:
+    st.sidebar.error("ARCH_AI_BOT not found in Streamlit secrets. Add it in app settings.")
+else:
+    def ask_groq(messages):
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        data = {
+            "model": "llama-3.1-8b-instant",
+            "messages": messages,
+            "temperature": 0.2,
+        }
+        try:
+            resp = requests.post(url, json=data, headers=headers, timeout=30)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            return f"Error calling LLM API: {e}"
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = [
+            {"role": "system", "content": (
+                "You are an expert architect and interior designer. "
+                "Answer clearly and concisely. Provide checklists and step-by-step guidance when helpful."
+            )}
+        ]
+
+    for msg in st.session_state.chat_history[1:]:
+        with st.sidebar.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    user_input = st.sidebar.chat_input("Ask anything about Architecture or Interior Design…")
+
+    if user_input:
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        st.sidebar.chat_message("user").write(user_input)
+
+        answer = ask_groq(st.session_state.chat_history)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+        st.sidebar.chat_message("assistant").write(answer)
+
+#https://esp32-fastapi-server-uh47.onrender.com/
