@@ -389,7 +389,60 @@ def build_contour_mesh_3d(contours, m_per_pixel, ceiling_height=CEILING_HEIGHT, 
 
     return mesh_elements
 
+def prisms_to_plotly(prisms):
+    """
+    Convert room prisms into a Plotly 3D mesh figure.
+    Each prism = {name, x, y, w, h, height}
+    """
 
+    fig = go.Figure()
+
+    for prism in prisms:
+        x = prism["x"]
+        y = prism["y"]
+        w = prism["w"]
+        h = prism["h"]
+        height = prism["height"]
+        name = prism["name"]
+
+        # Prism corners
+        xs = [x, x+w, x+w, x, x, x+w, x+w, x]
+        ys = [y, y, y+h, y+h, y, y, y+h, y+h]
+        zs = [0, 0, 0, 0, height, height, height, height]
+
+        # Faces of the prism
+        faces = [
+            [0,1,2,3],  # bottom
+            [4,5,6,7],  # top
+            [0,1,5,4],  # front
+            [1,2,6,5],  # right
+            [2,3,7,6],  # back
+            [3,0,4,7]   # left
+        ]
+
+        # Plot each face
+        for f in faces:
+            fig.add_trace(go.Mesh3d(
+                x=[xs[f[0]], xs[f[1]], xs[f[2]], xs[f[3]]],
+                y=[ys[f[0]], ys[f[1]], ys[f[2]], ys[f[3]]],
+                z=[zs[f[0]], zs[f[1]], zs[f[2]], zs[f[3]]],
+                opacity=0.5,
+                color="lightblue",
+                name=name,
+                showscale=False
+            ))
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title="Width (m)",
+            yaxis_title="Height (m)",
+            zaxis_title="Ceiling",
+            aspectmode="data"
+        ),
+        title="3D Room Layout"
+    )
+
+    return fig
 def segmentation_to_contour_meshes(seg_img_pil, img_display_w, img_display_h, ceiling_height=CEILING_HEIGHT, min_area_px=200):
     seg_np = np.array(seg_img_pil.convert("RGB"))
     gray = cv2.cvtColor(seg_np, cv2.COLOR_RGB2GRAY)
