@@ -695,6 +695,7 @@ elif mode == "Real-Time Sensor Dashboard":
 elif mode == "Optimized Layout":
 
     st.header("Optimized Layout Generator")
+
     colA, colB = st.columns(2)
     with colA:
         total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0)
@@ -702,29 +703,43 @@ elif mode == "Optimized Layout":
         num_rooms_input = st.number_input("Enter Total Number of Rooms", min_value=1, value=3, step=1)
 
     st.markdown("Select Plot Shape:")
-    plot_shape = st.radio("Plot Shape", ["Rectangle",'square'], horizontal=True)
+    plot_shape = st.radio("Plot Shape", ["Rectangle", "Square"], horizontal=True)
 
     plot_w = st.number_input("Plot Width (m)", min_value=5.0, value=10.0)
     plot_h = st.number_input("Plot Height (m)", min_value=5.0, value=12.0)
+
     if st.button("Generate Optimized Layout", type="primary", use_container_width=True):
-        # Create semantic layout (room area distribution)
-        layout, msg = generate_semantic_layout(total_area, num_rooms_input,
-                                               property_type=None,
-                                               plot_shape=plot_shape,
-                                               plot_w=plot_w,
-                                               plot_h=plot_h)
+
+        # --- Generate Semantic Layout ---
+        layout, msg = generate_semantic_layout(
+            total_area,
+            num_rooms_input,
+            property_type=None,
+            plot_shape=plot_shape.lower(),
+            plot_w=plot_w,
+            plot_h=plot_h
+        )
+
         rooms = layout.get("rooms", [])
+
         st.subheader("Optimized Room Area Distribution")
         for r in rooms:
             st.write(f"**{r['name'].title()}** → {r['area']} m²")
-            st.markdown("### 2D Layout Preview")
-            fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
-            st.pyplot(fig2d)
-            prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
+
+        # --- 2D Layout ---
+        st.markdown("### 2D Layout Preview")
+        fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
+        st.pyplot(fig2d)
+
+        # --- Convert layout to prisms for 3D ---
+        prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
 
         if not prisms:
             st.error("Failed to generate 3D geometry.")
         else:
+            # Generate 3D figure
+            fig3d = prisms_to_plotly(prisms)
+
             st.markdown("### 3D Layout Visualization")
             st.plotly_chart(fig3d, use_container_width=True)
 
