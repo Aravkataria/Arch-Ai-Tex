@@ -692,112 +692,71 @@ elif mode == "Real-Time Sensor Dashboard":
                     else:
                         col.info("No main building contour found to extrude for 3D.")
 
-elif mode == "Optimized Layout":
+if mode == "Optimized Layout":
 
     st.header("Optimized Layout Generator")
     
-    if 'total_area' not in st.session_state:
-        st.session_state.total_area = 120.0
-    if 'num_rooms_input' not in st.session_state:
-        st.session_state.num_rooms_input = 3
-    if 'plot_w' not in st.session_state:
-        st.session_state.plot_w = 10.0
-    if 'plot_h' not in st.session_state:
-        st.session_state.plot_h = 12.0
-    if 'layout_generated' not in st.session_state:
-        st.session_state.layout_generated = False
-    if 'layout_data' not in st.session_state:
-        st.session_state.layout_data = None
-    if 'msg' not in st.session_state:
-        st.session_state.msg = ""
+    # Use st.container to group input elements logically
+    with st.container(border=True): 
+        st.subheader("Input Parameters")
+        colA, colB = st.columns(2)
+        with colA:
+            # Use 'key' for number inputs to avoid potential warnings/issues if 
+            # the app's state resets, although often optional here.
+            total_area = st.number_input("Enter Total Area (sqm)", min_value=30.0, value=120.0, step=10.0, key="total_area_input")
+        with colB:
+            num_rooms_input = st.number_input("Enter Total Number of Rooms (bedrooms)", min_value=0, value=3, step=1, key="num_rooms_input")
 
+        st.divider() # Visual separator
+        st.markdown("**Preview Plot Dimensions**")
+        colC, colD = st.columns(2)
+        with colC:
+            plot_w = st.number_input("Plot Width (m)", min_value=3.0, value=10.0, key="plot_w_input")
+        with colD:
+            plot_h = st.number_input("Plot Height (m)", min_value=3.0, value=12.0, key="plot_h_input")
 
-    def generate_layout_callback():
-        area = st.session_state.total_area
-        num_rooms = st.session_state.num_rooms_input
+    st.write("---") # Separator before the button
+
+    if st.button("Generate Optimized Layout", use_container_width=True):
         
-        layout, msg = generate_semantic_layout(area, num_rooms)
+        # 1. Generate core semantic layout
+        # Ensure your 'generate_semantic_layout' returns the required 'bbox' for plotting
+        layout, msg = generate_semantic_layout(total_area, num_rooms_input)
         
-        st.session_state.layout_data = layout
-        st.session_state.msg = msg
-        st.session_state.layout_generated = True
-
-    
-    colA, colB = st.columns(2)
-    with colA:
-        st.number_input(
-            "Enter Total Area (sqm)", 
-            min_value=30.0, 
-            value=st.session_state.total_area,
-            step=10.0,
-            key="total_area"
-        )
-    with colB:
-        st.number_input(
-            "Enter Total Number of Rooms (bedrooms)", 
-            min_value=0, 
-            value=st.session_state.num_rooms_input,
-            step=1,
-            key="num_rooms_input"
-        )
-
-    st.number_input(
-        "Plot Width (m) - for preview", 
-        min_value=3.0, 
-        value=st.session_state.plot_w,
-        key="plot_w"
-    )
-    st.number_input(
-        "Plot Height (m) - for preview", 
-        min_value=3.0, 
-        value=st.session_state.plot_h,
-        key="plot_h"
-    )
-
-    if st.button("Generate Optimized Layout", on_click=generate_layout_callback):
-        pass
-    
-    if st.session_state.layout_generated:
-        if st.session_state.msg:
-            st.success(st.session_state.msg)
-            
-        layout = st.session_state.layout_data
-        plot_w = st.session_state.plot_w
-        plot_h = st.session_state.plot_h
         rooms = layout.get("rooms", [])
 
-        with st.expander("View Optimized Layout Results", expanded=True):
-            
-            st.subheader("Optimized Room Area Distribution")
-            for r in rooms:
-                st.write(f"**{r['name'].title()}** → {r['area']} m²")
+        # 2. Display area distribution
+        st.subheader("Optimized Room Area Distribution")
+        for r in rooms:
+            st.write(f"**{r['name'].title()}** → {r['area']} m²")
 
-            st.markdown("---")
-            st.markdown("### 2D Layout Preview")
+        # 3. 2D Plot Visualization
+        st.markdown("### 2D Layout Preview 📐")
+        try:
             fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
-            if fig2d:
-                st.pyplot(fig2d)
-            else:
-                st.error("Failed to generate 2D plot.")
-            
-            st.markdown("---")
-            st.markdown("### 3D Layout Visualization")
-            
-            try:
-                prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
-            except NameError:
-                st.error("Error: CEILING_HEIGHT variable is not defined.")
-                prisms = []
-                
-            if not prisms:
-                st.error("Failed to generate 3D geometry.")
-            else:
-                fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
-                if fig3d:
-                    st.plotly_chart(fig3d, use_container_width=True)
-                else:
-                    st.error("Failed to generate 3D plot.")
+            st.pyplot(fig2d)
+        except Exception as e:
+            st.error(f"Error generating 2D layout: {e}")
 
+        st.write("---")
+
+        # 4. Convert 2D → 3D (prisms)
+        prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
+
+        # 5. 3D Plot Visualization
+        if not prisms:
+            st.error("Failed to generate 3D geometry. Check the 'layout_to_prisms' logic.")
+        else:
+            fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
+            st.markdown("### 3D Layout Visualization 🏗️")
+            try:
+                # Setting use_container_width=True is good practice
+                st.plotly_chart(fig3d, use_container_width=True) 
+            except Exception as e:
+                 st.error(f"Error generating 3D layout: {e}")
+
+
+        st.success(f"Optimized Layout Generated Successfully! Message: **{msg}**")
 
 
 st.sidebar.header("Arch-Ai-Bot")
