@@ -695,49 +695,108 @@ elif mode == "Real-Time Sensor Dashboard":
 elif mode == "Optimized Layout":
 
     st.header("Optimized Layout Generator")
+    
+    if 'total_area' not in st.session_state:
+        st.session_state.total_area = 120.0
+    if 'num_rooms_input' not in st.session_state:
+        st.session_state.num_rooms_input = 3
+    if 'plot_w' not in st.session_state:
+        st.session_state.plot_w = 10.0
+    if 'plot_h' not in st.session_state:
+        st.session_state.plot_h = 12.0
+    if 'layout_generated' not in st.session_state:
+        st.session_state.layout_generated = False
+    if 'layout_data' not in st.session_state:
+        st.session_state.layout_data = None
+    if 'msg' not in st.session_state:
+        st.session_state.msg = ""
+
+
+    def generate_layout_callback():
+        area = st.session_state.total_area
+        num_rooms = st.session_state.num_rooms_input
+        
+        layout, msg = generate_semantic_layout(area, num_rooms)
+        
+        st.session_state.layout_data = layout
+        st.session_state.msg = msg
+        st.session_state.layout_generated = True
+
+    
     colA, colB = st.columns(2)
     with colA:
-        total_area = st.number_input(
+        st.number_input(
             "Enter Total Area (sqm)", 
             min_value=30.0, 
-            value=120.0, 
-            step=10.0
+            value=st.session_state.total_area,
+            step=10.0,
+            key="total_area"
         )
     with colB:
-        num_rooms_input = st.number_input(
+        st.number_input(
             "Enter Total Number of Rooms (bedrooms)", 
             min_value=0, 
-            value=3, 
-            step=1
+            value=st.session_state.num_rooms_input,
+            step=1,
+            key="num_rooms_input"
         )
 
-    plot_w = st.number_input("Plot Width (m) - for preview", min_value=3.0, value=10.0)
-    plot_h = st.number_input("Plot Height (m) - for preview", min_value=3.0, value=12.0)
+    st.number_input(
+        "Plot Width (m) - for preview", 
+        min_value=3.0, 
+        value=st.session_state.plot_w,
+        key="plot_w"
+    )
+    st.number_input(
+        "Plot Height (m) - for preview", 
+        min_value=3.0, 
+        value=st.session_state.plot_h,
+        key="plot_h"
+    )
 
-    if st.button("Generate Optimized Layout"):
-        layout, msg = generate_semantic_layout(total_area, num_rooms_input)
+    if st.button("Generate Optimized Layout", on_click=generate_layout_callback):
+        pass
+    
+    if st.session_state.layout_generated:
+        if st.session_state.msg:
+            st.success(st.session_state.msg)
+            
+        layout = st.session_state.layout_data
+        plot_w = st.session_state.plot_w
+        plot_h = st.session_state.plot_h
         rooms = layout.get("rooms", [])
 
-        st.subheader("Optimized Room Area Distribution")
-        for r in rooms:
-            st.write(f"**{r['name'].title()}** → {r['area']} m²")
+        with st.expander("View Optimized Layout Results", expanded=True):
+            
+            st.subheader("Optimized Room Area Distribution")
+            for r in rooms:
+                st.write(f"**{r['name'].title()}** → {r['area']} m²")
 
-        # 2D Layout Plot
-        st.markdown("### 2D Layout Preview")
-        fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
-        st.pyplot(fig2d)
-
-        # Convert 2D → 3D
-        prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
-
-        if not prisms:
-            st.error("Failed to generate 3D geometry.")
-        else:
+            st.markdown("---")
+            st.markdown("### 2D Layout Preview")
+            fig2d = plot_layout(layout, plot_w, plot_h, "Optimized 2D Layout")
+            if fig2d:
+                st.pyplot(fig2d)
+            else:
+                st.error("Failed to generate 2D plot.")
+            
+            st.markdown("---")
             st.markdown("### 3D Layout Visualization")
-            fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
-            st.plotly_chart(fig3d, use_container_width=True)
-
-        st.success("Optimized Layout Generated Successfully!")
+            
+            try:
+                prisms = layout_to_prisms(layout, plot_w, plot_h, CEILING_HEIGHT)
+            except NameError:
+                st.error("Error: CEILING_HEIGHT variable is not defined.")
+                prisms = []
+                
+            if not prisms:
+                st.error("Failed to generate 3D geometry.")
+            else:
+                fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
+                if fig3d:
+                    st.plotly_chart(fig3d, use_container_width=True)
+                else:
+                    st.error("Failed to generate 3D plot.")
 
 
 
