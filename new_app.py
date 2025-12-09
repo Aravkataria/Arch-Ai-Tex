@@ -791,7 +791,8 @@ elif mode == "Optimized Layout":
             st.error("Failed to generate 3D geometry.")
         else:
             # Generate 3D figure
-            fig3d = prisms_to_plotly(prisms)
+            fig3d = plot_layout_3d(prisms, plot_w, plot_h, "3D Optimized Layout")
+            st.markdown("### 3D Layout Visualization")
 
             st.markdown("### 3D Layout Visualization")
             st.plotly_chart(fig3d, use_container_width=True)
