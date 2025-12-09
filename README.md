@@ -210,4 +210,5 @@ Follow these steps to set up the project locally:
          app.py
    
 ## Deployment
-The project is deployed online at [[Arch-Ai-Tex](https://arch-ai-tex.streamlit.app/)]
+The project is deployed online at [[Arch-Ai-Tex](https://arch-ai-tex.streamlit.app/)] (basic; can only Generate floor plans given input, Optimized Layout Generation, and Segmentation model)
+and [[Arch-Ai-Tex](https://arch-ai-tex-new.streamlit.app/)] (more advance features; can do everything as the basic and also has a integrated chatbot, Real-Time Sensor Dashboard, and real-time 3d modeling)
