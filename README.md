@@ -1,6 +1,9 @@
 # Arch-Ai-Tex  
 ## House-Floor-Generator
-<p align="center">[[Arch-Ai-Tex-site](https://aravkataria.github.io/Arch-Ai-Tex/)]</p>
+
+<h1 align="center">
+  <a href="https://aravkataria.github.io/Arch-Ai-Tex/">Arch-Ai-Tex</a>
+</h1>
 
 ## Table of Contents  
 1. [Project Overview](#project-overview)  
