@@ -215,6 +215,7 @@ Follow these steps to set up the project locally:
    
 ## Deployment
 The project is deployed online at 
+
 [[Arch-Ai-Tex](https://aravkataria.github.io/Arch-Ai-Tex/)] (non streamlit site with all the features except 3d modeling)
 
 [[Arch-Ai-Tex](https://arch-ai-tex-new.streamlit.app/)] (basic; can only Generate floor plans given input, Optimized Layout Generation, and Segmentation model)
