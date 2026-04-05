@@ -1,4 +1,3 @@
-/* ─── CURSOR ─── */
 const cur = document.getElementById('cur'), ring = document.getElementById('curRing');
 let mx=0,my=0,rx=0,ry=0;
 document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;});
@@ -12,7 +11,7 @@ document.querySelectorAll('button,a,input,select,.radio-opt').forEach(el=>{
   el.addEventListener('mouseenter',()=>document.body.classList.add('btn-hover'));
   el.addEventListener('mouseleave',()=>document.body.classList.remove('btn-hover'));
 });
-
+ 
 /* ─── HERO CANVAS ─── */
 const hc = document.getElementById('heroCanvas');
 const hctx = hc.getContext('2d');
@@ -47,11 +46,11 @@ function tickHero(){
   else setTimeout(()=>{hp=0;tickHero();},2800);
 }
 setTimeout(tickHero,900);
-
+ 
 /* ─── DARK MODE ─── */
 const themeToggle = document.getElementById('themeToggle');
 const themeLabel = document.getElementById('themeLabel');
-
+ 
 function applyTheme(dark) {
   if (dark) {
     document.body.classList.add('dark');
@@ -62,12 +61,12 @@ function applyTheme(dark) {
   }
   localStorage.setItem('theme', dark ? 'dark' : 'light');
 }
-
+ 
 themeToggle.addEventListener('click', () => {
   applyTheme(!document.body.classList.contains('dark'));
 });
 applyTheme(localStorage.getItem('theme') === 'dark');
-
+ 
 /* ─── CHAT TOGGLE ─── */
 let chatOpen = true;
 function toggleChat() {
@@ -76,11 +75,12 @@ function toggleChat() {
   const appBody = document.getElementById('appBody');
   const appMain = document.querySelector('.app-main');
   const reopenBtn = document.getElementById('chatReopenBtn');
-
+  const isMobile = window.innerWidth <= 900;
+ 
   if (chatOpen) {
     sidebar.classList.remove('collapsed');
     appBody.classList.remove('chat-collapsed');
-    appMain.style.maxWidth = 'calc(100% - 320px)';
+    if (!isMobile) appMain.style.maxWidth = 'calc(100% - 320px)';
     reopenBtn.classList.remove('visible');
   } else {
     sidebar.classList.add('collapsed');
@@ -89,20 +89,20 @@ function toggleChat() {
     setTimeout(() => reopenBtn.classList.add('visible'), 350);
   }
 }
-
-
+ 
+ 
 function updateArea(){
   const l=parseFloat(document.getElementById('g-len').value)||0;
   const w=parseFloat(document.getElementById('g-wid').value)||0;
   const a=Math.max(100,l*w);
   document.getElementById('areaDisplay').textContent=`Calculated Total Area: ${a.toFixed(2)} m² (≈ ${Math.round(a*10.7639)} sq ft)`;
 }
-
+ 
 /* ─── SCROLL TO APP ─── */
 function scrollToApp(){
   document.getElementById('appLayer').scrollIntoView({behavior:'smooth'});
 }
-
+ 
 /* ─── TABS ─── */
 function switchTab(id,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -110,7 +110,7 @@ function switchTab(id,btn){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+id).classList.add('active');
 }
-
+ 
 /* ─── RADIO ─── */
 const radioState={};
 function selectRadio(el,group,val){
@@ -119,12 +119,12 @@ function selectRadio(el,group,val){
   radioState[group]=val;
 }
 radioState['plotShape']='rectangle';
-
+ 
 /* ─── ONNX MODEL ─── */
 const ONNX_URL = 'https://raw.githubusercontent.com/Aravkataria/Arch-Ai-Tex/main/generator.onnx';
 let onnxSession = null;
 let modelLoading = false;
-
+ 
 async function loadONNXModel() {
   if (onnxSession) return onnxSession;
   if (modelLoading) return null;
@@ -144,10 +144,10 @@ async function loadONNXModel() {
     return null;
   }
 }
-
+ 
 // preload model in background on page load
 window.addEventListener('load', () => setTimeout(loadONNXModel, 2000));
-
+ 
 async function runONNXInference() {
   const session = await loadONNXModel();
   if (!session) throw new Error('Model failed to load');
@@ -163,7 +163,7 @@ async function runONNXInference() {
   const output = results[Object.keys(results)[0]];
   return output.data; // Float32Array of 256*256 values in [-1, 1]
 }
-
+ 
 function renderONNXToCanvas(canvasEl, floatData) {
   canvasEl.width = 256; canvasEl.height = 256;
   const ctx = canvasEl.getContext('2d');
@@ -175,18 +175,18 @@ function renderONNXToCanvas(canvasEl, floatData) {
   ctx.putImageData(imgData, 0, 0);
   return imgData;
 }
-
+ 
 /* ─── JS SEGMENTATION (mirrors cv2.threshold + connectedComponents) ─── */
 function applySegmentation(floatData, canvasEl) {
   canvasEl.width = 256; canvasEl.height = 256;
   const ctx = canvasEl.getContext('2d');
   const W = 256, H = 256;
-
+ 
   // convert to 0-255 grayscale
   const gray = new Uint8Array(W * H);
   for (let i = 0; i < W*H; i++)
     gray[i] = Math.max(0, Math.min(255, Math.round(((floatData[i]+1)/2)*255)));
-
+ 
   // ── Otsu's threshold (automatic, better than fixed 128) ──
   const hist = new Int32Array(256);
   for (let i = 0; i < W*H; i++) hist[gray[i]]++;
@@ -201,11 +201,11 @@ function applySegmentation(floatData, canvasEl) {
     const v=wB*wF*(mB-mF)*(mB-mF);
     if(v>maxVar){maxVar=v;thresh=t;}
   }
-
+ 
   // binary: 0=wall(dark), 1=room(bright)
   const binary = new Uint8Array(W*H);
   for (let i=0;i<W*H;i++) binary[i] = gray[i]>thresh ? 1 : 0;
-
+ 
   // ── connected components ──
   const labels = new Int32Array(W*H).fill(-1);
   let numLabels=0;
@@ -225,7 +225,7 @@ function applySegmentation(floatData, canvasEl) {
       }
     }
   }
-
+ 
   // sort by size, skip largest (bg), take next 8 = rooms
   const sorted = compInfo.filter(c=>c.size>=80).sort((a,b)=>b.size-a.size);
   const rooms = sorted.slice(1,9);
@@ -235,7 +235,7 @@ function applySegmentation(floatData, canvasEl) {
     [197,176,213],[255,237,111],[188,189,34],[140,86,75]
   ];
   rooms.forEach((c,i)=>colorMap.set(c.id, ROOM_COLORS[i%ROOM_COLORS.length]));
-
+ 
   // ── draw: dark bg, colored rooms, bright wall lines ──
   const out = ctx.createImageData(W,H);
   for (let i=0;i<W*H;i++){
@@ -251,7 +251,7 @@ function applySegmentation(floatData, canvasEl) {
     }
   }
   ctx.putImageData(out, 0, 0);
-
+ 
   // ── overlay sharp wall lines (edge detection on original gray) ──
   const edgeData = ctx.createImageData(W,H);
   for (let y=1;y<H-1;y++){
@@ -272,11 +272,11 @@ function applySegmentation(floatData, canvasEl) {
   ctx.globalAlpha=0.85;
   ctx.drawImage(tmp,0,0);
   ctx.globalAlpha=1.0;
-
+ 
   return rooms;
 }
-
-
+ 
+ 
 /* ─── GAN GENERATE ─── */
 async function generateGAN() {
   const beds = parseInt(document.getElementById('g-beds').value) || 3;
@@ -285,7 +285,7 @@ async function generateGAN() {
   const area = Math.max(100, len * wid);
   const btn = document.querySelector('#panel-gan .btn-gen');
   btn.textContent = 'Loading model…'; btn.disabled = true;
-
+ 
   function predictDwelling(area, beds) {
     if (area < 50) return 'Studio Flat';
     if (area < 80) return beds <= 1 ? 'Apartment' : 'Semi-Detached';
@@ -293,19 +293,19 @@ async function generateGAN() {
     if (area < 250) return beds <= 3 ? 'Detached House' : 'Large Detached House';
     return 'Villa';
   }
-
+ 
   try {
     const session = await loadONNXModel();
     if (!session) throw new Error('Could not load model');
     btn.textContent = 'Generating…';
-
+ 
     const grid = document.getElementById('plansGrid');
     const segGrid = document.getElementById('segGrid');
     grid.innerHTML = ''; segGrid.innerHTML = '';
-
+ 
     for (let i = 0; i < 3; i++) {
       const floatData = await runONNXInference();
-
+ 
       // ── raw plan card ──
       const card = document.createElement('div'); card.className = 'plan-card';
       const wrap = document.createElement('div'); wrap.className = 'plan-canvas-wrap';
@@ -315,7 +315,7 @@ async function generateGAN() {
       const lbl = document.createElement('div'); lbl.className = 'plan-label';
       lbl.innerHTML = `<span>Plan ${i+1}</span><a class="plan-dl" href="#" onclick="downloadPlan(event,this)">↓ PNG</a>`;
       card.appendChild(wrap); card.appendChild(lbl); grid.appendChild(card);
-
+ 
       // ── segmented plan card ──
       const segCard = document.createElement('div'); segCard.className = 'plan-card';
       const segWrap = document.createElement('div'); segWrap.className = 'plan-canvas-wrap';
@@ -326,11 +326,11 @@ async function generateGAN() {
       segLbl.innerHTML = `<span>Segmented ${i+1}</span><a class="plan-dl" href="#" onclick="downloadPlan(event,this)">↓ PNG</a>`;
       segCard.appendChild(segWrap); segCard.appendChild(segLbl); segGrid.appendChild(segCard);
     }
-
+ 
     const dw = predictDwelling(area, beds);
     document.getElementById('dwelling-badge').textContent = `Predicted Dwelling Type: ${dw}`;
     document.getElementById('gan-results').style.display = 'block';
-
+ 
   } catch(e) {
     alert('Model error: ' + e.message + '\n\nMake sure generator.onnx is in your GitHub repo.');
     console.error(e);
@@ -338,8 +338,8 @@ async function generateGAN() {
     btn.textContent = 'Generate Floorplans'; btn.disabled = false;
   }
 }
-
-
+ 
+ 
 /* ─── OPTIMIZED GENERATE ─── */
 function generateOptimized(){
   const totalArea=parseFloat(document.getElementById('o-area').value)||120;
@@ -356,7 +356,7 @@ function generateOptimized(){
     document.getElementById('opt-results').style.display='block';
   },1000);
 }
-
+ 
 function computeRooms(total,n){
   const fixed=[{name:'living & dining',ratio:.28},{name:'kitchen',ratio:.08},{name:'bathroom',ratio:.06}];
   const fixedTotal=fixed.reduce((s,r)=>s+r.ratio,0);
@@ -366,7 +366,7 @@ function computeRooms(total,n){
   for(let i=0;i<nBeds;i++) rooms.push({name:`bedroom ${i+1}`,area:+(total*bedRatio).toFixed(2)});
   return rooms;
 }
-
+ 
 function renderRoomList(rooms,total){
   const el=document.getElementById('roomList');
   el.innerHTML='';
@@ -375,7 +375,7 @@ function renderRoomList(rooms,total){
     el.innerHTML+=`<div class="room-item"><span class="room-name">${r.name}</span><div class="room-bar-wrap"><div class="room-bar" style="width:${pct}%"></div></div><span class="room-area">${r.area} m²</span></div>`;
   });
 }
-
+ 
 function draw2DLayout(rooms,pw,ph){
   const cv=document.getElementById('canvas2d');
   cv.width=cv.offsetWidth||500;cv.height=400;
@@ -404,14 +404,14 @@ function draw2DLayout(rooms,pw,ph){
     x+=w+pad;rowH=Math.max(rowH,h);
   });
 }
-
+ 
 /* ─── DOWNLOAD PLAN ─── */
 function downloadPlan(e,link){
   e.preventDefault();
   const wrap=link.closest('.plan-card').querySelector('canvas');
   const a=document.createElement('a');a.href=wrap.toDataURL('image/png');a.download='floorplan.png';a.click();
 }
-
+ 
 /* ─── SENSOR STATE MACHINE ─── */
 let sensorState={length:null,breadth:null,lastDist:null,pir:null,ir:null,lastSet:null};
 function renderSensor(){
@@ -501,7 +501,7 @@ function generateFromSensor(){
   setTimeout(()=>generateGAN(),300);
 }
 renderSensor();
-
+ 
 /* ─── CHATBOT ─── */
 async function sendChat(){
   const inp=document.getElementById('chatInput');
@@ -537,7 +537,7 @@ function addMsg(text,role){
   const div=document.createElement('div');div.className=`msg ${role}`;div.textContent=text;
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
-
+ 
 /* ─── BIDIRECTIONAL SCROLL REVEAL ─── */
 function checkReveal(){
   const vh=window.innerHeight;
