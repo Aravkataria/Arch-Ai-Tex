@@ -89,8 +89,29 @@ This modular design enables flexibility — users can run any stage independentl
   The generator is one of two neural networks in a GAN system that competes against a discriminator network to create new, realistic data. The generator takes random noise as input and tries to produce synthetic data that is so convincing the discriminator cannot tell it apart from real data in the original training set. Through this adversarial process, the generator continuously improves its ability to generate authentic-looking outputs.  
   Example: Takes a 100-dimensional latent vector *z*, passes through fully connected + reshape layers, followed by several transposed convolution layers with BatchNorm and ReLU activations, producing an output image of size 256×256.  
 
+```math
+\mathcal{L}_G
+=
+-\mathbb{E}_{z \sim p_z(z)}
+\left[
+\log D(G(z))
+\right]
+```
+
 - **Discriminator:**  
-  The discriminator acts as a binary classifier that helps distinguish between real and generated data. It learns to improve its classification ability through training, refining its parameters to detect fake samples more accurately. When dealing with image data, it uses convolutional layers and LeakyReLU activations to extract meaningful features.  
+  The discriminator acts as a binary classifier that helps distinguish between real and generated data. It learns to improve its classification ability through training, refining its parameters to detect fake samples more accurately. When dealing with image data, it uses convolutional layers and LeakyReLU activations to extract meaningful features.
+
+  ```math
+  \mathcal{L}_D
+  =
+  -\frac{1}{2}
+  \left[
+  \mathbb{E}_{x \sim p_{\text{data}}(x)}
+  \left[\log D(x)\right]
+  +
+  \mathbb{E}_{z \sim p_z(z)}
+  \left[\log\left(1-D(G(z))\right)\right]
+  \right]
 
 - **Circuit:**  
   The Real-Time Sensor Dashboard uses different sensors to identify distance and other parameters.  
