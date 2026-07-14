@@ -5,6 +5,12 @@
   <a href="https://aravkataria.github.io/Arch-Ai-Tex/">Arch-Ai-Tex</a>
 </h1>
 
+<p align="center">
+  <img src="https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https://aravkataria.github.io/Arch-Ai-Tex/&count_bg=%2300BFFF&title_bg=%230D1117&icon=github.svg&icon_color=%23FFFFFF&title=Website+Visitors&edge_flat=false" />
+  <img src="https://img.shields.io/github/stars/Aravkataria/Arch-Ai-Tex?style=for-the-badge&color=00bfff&labelColor=0d1117" />
+  <img src="https://img.shields.io/github/forks/Aravkataria/Arch-Ai-Tex?style=for-the-badge&color=00bfff&labelColor=0d1117" />
+</p>
+
 ## Table of Contents  
 1. [Project Overview](#project-overview)  
 2. [Motivation](#motivation)  
