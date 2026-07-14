@@ -8,8 +8,8 @@
 <p align="center">
   <img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Faravkataria.github.io%2FArch-Ai-Tex%2F&label=Website+Visitors&color=00bfff&style=for-the-badge" />
   <img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2FAravkataria%2FArch-Ai-Tex&label=Repo+Visitors&color=00bfff&style=for-the-badge" />
-  <img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Faravkataria.github.io%2FArch-Ai-Tex%2F&label=Website+Visitors&color=00bfff&style=for-the-badge&v=2" />
-  <img src="https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2FAravkataria%2FArch-Ai-Tex&label=Repo+Visitors&color=00bfff&style=for-the-badge&v=2" />
+  <img src="https://img.shields.io/github/stars/Aravkataria/Arch-Ai-Tex?style=for-the-badge&color=00bfff&labelColor=0d1117" />
+  <img src="https://img.shields.io/github/forks/Aravkataria/Arch-Ai-Tex?style=for-the-badge&color=00bfff&labelColor=0d1117" />
 </p>
 
 ## Table of Contents  
