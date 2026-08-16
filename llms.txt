@@ -1,0 +1,36 @@
+# Arch-Ai-Tex
+
+> AI-powered house floor-plan generation system. Combines a GAN for floor-plan image synthesis, a Random Forest-based optimized layout generator, a segmentation model for wall/structure detection, and a real-time physical-room measurement pipeline using Arduino Mega + ESP32 sensors. Python/PyTorch/scikit-learn backend with a Streamlit app and a static demo site.
+
+Built to explore combining generative AI, classical ML, computer vision, and embedded/IoT sensor data to automate architectural floor-plan design. Three deployed variants exist: a GitHub Pages static site (non-Streamlit, most features except 3D), a basic Streamlit app (generation + optimized layout + segmentation), and an advanced Streamlit app (adds an integrated chatbot, the Real-Time Sensor Dashboard, and real-time 3D modeling).
+
+## Core pipeline
+
+- [floor_generater.py](floor_generater.py): GAN training script — trains the Generator/Discriminator, saves checkpoints and sample images every 10 epochs
+- [generator_epoch100.pth](generator_epoch100.pth) / [generator.onnx](generator.onnx): Trained GAN generator weights (PyTorch and ONNX), used for inference — produces 256×256 floor-plan images from a 100-dim latent vector
+- [room_predictor.py](room_predictor.py) / [room_predictor.joblib](room_predictor.joblib): Random Forest regression model estimating room layout/area distribution for the Optimized Layout Generator
+- [converter.py](converter.py): Model conversion utility (e.g. PyTorch → ONNX)
+
+## Apps / interfaces
+
+- [main.py](main.py): CLI entry point for generating floor plans (prompts for length, width, bedroom count, denoiser option, etc.)
+- [app.py](app.py): Streamlit web app — basic deployment (GAN generation, Optimized Layout Generator, segmentation)
+- [new_app.py](new_app.py): Streamlit web app — advanced deployment (adds integrated chatbot, Real-Time Sensor Dashboard, real-time 3D modeling)
+- [index.html](index.html) / [main.js](main.js) / [style.css](style.css): Static, non-Streamlit demo site deployed to GitHub Pages at https://aravkataria.github.io/Arch-Ai-Tex/
+- [server.py](server.py): Backend receiving real-time sensor data from the ESP32 over Wi-Fi
+
+## Hardware / IoT
+
+- [mega/mega.ino](mega/mega.ino): Arduino Mega 2560 firmware — reads HC-SR04 ultrasonic, HC-SR501 PIR, and IR sensors to capture physical room dimensions
+- [esp32/esp32.ino](esp32/esp32.ino): ESP32 firmware — transmits sensor data from the Mega to the backend over Wi-Fi (~15s interval)
+
+## Docs
+
+- [README.md](README.md): Full project documentation — motivation, workflow, model architecture and loss functions, training details, dataset/preprocessing, usage instructions, and feature breakdowns
+- [requirements.txt](requirements.txt): Python dependencies (Streamlit, PyTorch/torchvision CPU wheels, scikit-learn, OpenCV, transformers, diffusers, open3d, trimesh, FastAPI, etc.)
+
+## Deployments
+
+- GitHub Pages (static, most features except 3D): https://aravkataria.github.io/Arch-Ai-Tex/
+- Streamlit — basic: https://arch-ai-tex-new.streamlit.app/
+- Streamlit — advanced (chatbot, sensor dashboard, real-time 3D): https://arch-ai-tex.streamlit.app/
