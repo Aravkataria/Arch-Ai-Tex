@@ -3,18 +3,60 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-  <meta name="google-site-verification" content="97bFGgKqSxHco8YzVAOB22h8SnmJjcvBeSR3D8QRqBI" />
+
+<meta name="google-site-verification" content="97bFGgKqSxHco8YzVAOB22h8SnmJjcvBeSR3D8QRqBI" />
+
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Arch-Ai-Tex</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&amp;family=DM+Mono:wght@300;400;500&amp;family=Syne:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+
+<!-- SEO -->
+
+<title>Arch-Ai-Tex — AI-Powered Floor Plan Generator</title>
+
+<meta name="description"
+   content="Arch-Ai-Tex is an AI-powered architectural floor plan generator using GANs, optimized layouts, computer vision, and real-time IoT sensors. Generate intelligent floor plans directly in your browser."/>
+
+<meta name="keywords"
+   content="Arch-Ai-Tex, AI floor plan generator, AI architecture, floor plan generation, GAN floor plans, architectural AI, floor plan AI"/>
+
+<meta name="robots"
+   content="index, follow"/>
+
+<link rel="canonical"
+      href="https://aravkataria.github.io/Arch-Ai-Tex/"/>
+
+<!-- Open Graph -->
+
+<meta property="og:type" content="website"/>
+<meta property="og:title"
+      content="Arch-Ai-Tex — AI-Powered Floor Plan Generator"/>
+<meta property="og:description"
+      content="Generate intelligent architectural floor plans using AI, GANs, optimized layouts, computer vision, and real-time IoT sensors."/>
+<meta property="og:url"
+      content="https://aravkataria.github.io/Arch-Ai-Tex/"/>
+<meta property="og:site_name"
+      content="Arch-Ai-Tex"/>
+
+<!-- Twitter -->
+
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title"
+      content="Arch-Ai-Tex — AI-Powered Floor Plan Generator"/>
+<meta name="twitter:description"
+      content="AI-powered architectural floor plan generation with GANs, optimized layouts, computer vision, and IoT."/>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 
 <link href="style.css" rel="stylesheet"/></head>
+
 <body>
 <div class="cur" id="cur"></div>
 <div class="cur-ring" id="curRing"></div>
 <div class="grid-bg"></div>
+
 <!-- NAV -->
+
 <nav>
 <div class="nav-logo">Arch<span>·</span>Ai<span>·</span>Tex</div>
 <div class="nav-right">
@@ -28,30 +70,39 @@
 <button class="nav-btn" onclick="scrollToApp()">Try Demo</button>
 </div>
 </nav>
+
 <!-- ═══════════════ HERO ═══════════════ -->
+
 <section id="hero">
 <div class="hero-text">
 <div class="badge"><div class="badge-dot"></div>GAN · Random Forest · IoT</div>
 <h1 class="hero-h1">Design<br/><em>floors,</em><br/>intelligently.</h1>
-<p class="hero-sub">Enter dimensions and room count — watch a trained GAN generate architecturally coherent floor plans. Powered by PyTorch, scikit-learn, and real-time IoT sensors.</p>
+
+<p class="hero-sub"><strong>Arch-Ai-Tex</strong> is an AI-powered architectural floor plan generator. Enter dimensions and room count — watch a trained GAN generate architecturally coherent floor plans. Powered by PyTorch, scikit-learn, and real-time IoT sensors.</p>
+
 <div class="hero-btns">
 <button class="btn-p" onclick="scrollToApp()">Try Live Demo →</button>
 <a class="btn-s" href="https://github.com/Aravkataria/Arch-Ai-Tex" target="_blank">GitHub</a>
 </div>
 </div>
+
 <div class="hero-canvas-wrap">
 <canvas id="heroCanvas"></canvas>
 <div class="canvas-label">AI-generated · 256×256</div>
 </div>
 </section>
+
 <!-- STATS -->
+
 <div class="stats sr" style="background:#0c2340;">
 <div class="stat"><span class="stat-num" style="color:#38bdf8;">100</span><div class="stat-lbl" style="color:rgba(224,240,255,.45);">Training Epochs</div></div>
 <div class="stat"><span class="stat-num" style="color:#38bdf8;">256px</span><div class="stat-lbl" style="color:rgba(224,240,255,.45);">Output Resolution</div></div>
 <div class="stat"><span class="stat-num" style="color:#38bdf8;">4</span><div class="stat-lbl" style="color:rgba(224,240,255,.45);">Core Modules</div></div>
 <div class="stat"><span class="stat-num" style="color:#38bdf8;">IoT</span><div class="stat-lbl" style="color:rgba(224,240,255,.45);">Real-Time Sensors</div></div>
 </div>
+
 <!-- ═══════════════ APP LAYER ═══════════════ -->
+
 <div id="appLayer">
 <div class="app-header" style="background:#0c2340;color:#e0f0ff;">
 <div>
@@ -62,32 +113,41 @@
 <div class="app-qr-box" style="background:#0a1a2e;color:#38bdf8;border:1px solid rgba(56,189,248,.2);">Scan QR for full project</div>
 </div>
 </div>
+
 <div class="tabs" style="background:#0c2340;border-bottom:1px solid rgba(56,189,248,.1);">
 <button class="tab active" onclick="switchTab('gan',this)">GAN Generator</button>
 <button class="tab" onclick="switchTab('optimized',this)">Optimized Layout</button>
 <button class="tab" onclick="switchTab('sensor',this)">Real-Time Sensor Dashboard</button>
 </div>
+
 <div class="app-body" id="appBody">
 <div class="app-main">
+
 <!-- ── GAN PANEL ── -->
+
 <div class="panel active" id="panel-gan">
 <div class="section-tag">// GAN Floorplan Generator</div>
+
 <div class="form-row">
 <div class="form-group">
 <label>House Length (m)</label>
 <input id="g-len" min="10" oninput="updateArea()" step="1" type="number" value="50"/>
 </div>
+
 <div class="form-group">
 <label>House Width (m)</label>
 <input id="g-wid" min="10" oninput="updateArea()" step="1" type="number" value="30"/>
 </div>
 </div>
+
 <div class="area-display" id="areaDisplay">Calculated Total Area: 1500.00 m² (≈ 16146 sq ft)</div>
+
 <div class="form-row">
 <div class="form-group">
 <label>Number of Bedrooms</label>
 <input id="g-beds" min="1" step="1" type="number" value="3"/>
 </div>
+
 <div class="form-group" style="justify-content:flex-end;padding-top:22px;">
 <div class="checkbox-row">
 <input id="g-denoise" type="checkbox"/>
@@ -95,8 +155,11 @@
 </div>
 </div>
 </div>
+
 <button class="btn-gen" onclick="generateGAN()">Generate Floorplans</button>
+
 <div id="model-status" style="font-size:.68rem;color:rgba(56,189,248,.4);margin-top:-28px;margin-bottom:20px;letter-spacing:.08em;">⏳ Loading model in background…</div>
+
 <div id="gan-results" style="display:none;">
 <div class="dwelling-badge" id="dwelling-badge"></div>
 <div class="section-hd">Generated Floor Plans</div>
@@ -105,19 +168,24 @@
 <div class="plans-grid" id="segGrid"></div>
 </div>
 </div>
+
 <!-- ── OPTIMIZED PANEL ── -->
+
 <div class="panel" id="panel-optimized">
 <div class="section-tag">// Optimized Layout Generator</div>
+
 <div class="form-row">
 <div class="form-group">
 <label>Total Area (m²)</label>
 <input id="o-area" min="30" step="10" type="number" value="120"/>
 </div>
+
 <div class="form-group">
 <label>Total Number of Rooms</label>
 <input id="o-rooms" min="1" step="1" type="number" value="5"/>
 </div>
 </div>
+
 <div class="form-group" style="margin-bottom:20px;">
 <label>Plot Shape</label>
 <div class="radio-group">
@@ -125,17 +193,21 @@
 <div class="radio-opt" onclick="selectRadio(this,'plotShape','square')">Square</div>
 </div>
 </div>
+
 <div class="form-row">
 <div class="form-group">
 <label>Plot Width (m)</label>
 <input id="o-pw" min="5" step="1" type="number" value="10"/>
 </div>
+
 <div class="form-group">
 <label>Plot Height (m)</label>
 <input id="o-ph" min="5" step="1" type="number" value="12"/>
 </div>
 </div>
+
 <button class="btn-gen" onclick="generateOptimized()">Generate Optimized Layout</button>
+
 <div id="opt-results" style="display:none;">
 <div class="msg-success">✓ Optimized Layout Generated Successfully!</div>
 <div class="section-hd">Room Area Distribution</div>
@@ -144,29 +216,40 @@
 <canvas height="400" id="canvas2d"></canvas>
 </div>
 </div>
+
 <!-- ── SENSOR PANEL ── -->
+
 <div class="panel" id="panel-sensor">
 <div class="section-tag">// Real-Time Sensor Dashboard</div>
+
 <p style="font-size:.78rem;color:rgba(12,35,64,.55);margin-bottom:28px;line-height:1.8;">Fetch ultrasonic readings one at a time from the ESP32 server and confirm whether it's Length or Breadth.</p>
+
 <div id="sensor-ui">
 <!-- State machine rendered by JS -->
 </div>
 </div>
 </div><!-- /app-main -->
+
 <!-- ── SIDEBAR CHATBOT ── -->
+
 <div class="app-sidebar" id="appSidebar" style="border-left:1px solid rgba(56,189,248,.1);">
+
 <div class="chat-header" style="background:#0c2340;border-bottom:1px solid rgba(56,189,248,.1);">
 <div style="display:flex;align-items:center;justify-content:space-between;">
 <div>
 <div class="chat-title" style="color:#e0f0ff;">Arch-Ai-Bot</div>
 <div class="chat-sub" style="color:rgba(224,240,255,.4);">Architecture &amp; Interior Design Assistant</div>
 </div>
+
 <button onclick="toggleChat()" style="background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:4px 10px;border-radius:2px;font-family:'DM Mono',monospace;font-size:.6rem;cursor:none;letter-spacing:.08em;text-transform:uppercase;">Hide ✕</button>
+
 </div>
 </div>
+
 <div class="chat-msgs" id="chatMsgs" style="background:#080f1c;">
 <div class="msg bot">Hey there! I'm your architecture assistant. Ask me anything about floor plans, room layouts, building design, or interior styles. 🏗️</div>
 </div>
+
 <div class="chat-input-row" style="background:#0a1525;border-top:1px solid rgba(56,189,248,.1);">
 <input class="chat-input" id="chatInput" onkeydown="if(event.key==='Enter')sendChat()" placeholder="Ask about architecture…" style="background:#0c2340;border-color:rgba(56,189,248,.2);color:#e0f0ff;" type="text"/>
 <button class="chat-send" onclick="sendChat()">Send</button>
@@ -174,20 +257,46 @@
 </div>
 </div><!-- /app-body -->
 </div><!-- /appLayer -->
+
 <button class="chat-reopen-btn" id="chatReopenBtn" onclick="toggleChat()">💬 Open Chat</button>
+
 <!-- ═══════════════ LANDING SECTIONS ═══════════════ -->
+
 <!-- FEATURES -->
+
 <section class="section" id="features">
 <div class="sec-tag sr">01 — Features</div>
 <h2 class="sec-h2 sr">Four modules.<br/>One pipeline.</h2>
+
 <div class="features-grid">
-<div class="feat sr"><span class="feat-icon">🏗️</span><div class="feat-title">GAN Floorplan Generator</div><p class="feat-desc">Trained DCGAN synthesizes 256×256 floor plan images from noise + conditional inputs. Optional OpenCV denoiser and FCN-ResNet50 wall segmentation for crisp structural clarity.</p></div>
-<div class="feat sr"><span class="feat-icon">📐</span><div class="feat-title">Optimized Layout Generator</div><p class="feat-desc">Random Forest regression + heuristic algorithms produce spatially logical room arrangements tuned by plot dimensions, shape, and property type. Outputs 2D + interactive 3D.</p></div>
-<div class="feat sr"><span class="feat-icon">📡</span><div class="feat-title">Real-Time Sensor Dashboard</div><p class="feat-desc">HC-SR04 ultrasonic + PIR + IR sensors feed an Arduino Mega 2560 + ESP32. Live dimensions stream over Wi-Fi to auto-trigger GAN-based layout generation.</p></div>
-<div class="feat sr"><span class="feat-icon">🤖</span><div class="feat-title">Arch-Ai-Bot</div><p class="feat-desc">Built-in LLM chatbot (Llama 3.1 via Groq API) answers architecture and interior design questions with checklists and step-by-step guidance — always on in the sidebar.</p></div>
+<div class="feat sr">
+<span class="feat-icon">🏗️</span>
+<div class="feat-title">GAN Floorplan Generator</div>
+<p class="feat-desc">Trained DCGAN synthesizes 256×256 floor plan images from noise + conditional inputs. Optional OpenCV denoiser and FCN-ResNet50 wall segmentation for crisp structural clarity.</p>
+</div>
+
+<div class="feat sr">
+<span class="feat-icon">📐</span>
+<div class="feat-title">Optimized Layout Generator</div>
+<p class="feat-desc">Random Forest regression + heuristic algorithms produce spatially logical room arrangements tuned by plot dimensions, shape, and property type. Outputs 2D + interactive 3D.</p>
+</div>
+
+<div class="feat sr">
+<span class="feat-icon">📡</span>
+<div class="feat-title">Real-Time Sensor Dashboard</div>
+<p class="feat-desc">HC-SR04 ultrasonic + PIR + IR sensors feed an Arduino Mega 2560 + ESP32. Live dimensions stream over Wi-Fi to auto-trigger GAN-based layout generation.</p>
+</div>
+
+<div class="feat sr">
+<span class="feat-icon">🤖</span>
+<div class="feat-title">Arch-Ai-Bot</div>
+<p class="feat-desc">Built-in LLM chatbot (Llama 3.1 via Groq API) answers architecture and interior design questions with checklists and step-by-step guidance — always on in the sidebar.</p>
+</div>
 </div>
 </section>
+
 <!-- HOW IT WORKS -->
+
 <section class="section" id="how" style="background:#0c2340;color:#e0f0ff; padding-bottom: 80px;">
 <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:72px; flex-wrap:wrap; gap:24px;">
 <div>
@@ -195,60 +304,89 @@
 <h2 class="sec-h2 sr" style="color:#e0f0ff; margin-bottom:0;">From input<br/>to layout.</h2>
 </div>
 </div>
+
 <div class="steps-row">
+
 <div class="step-item sr">
 <div class="step-num" style="border-color:#0891b2;color:#0891b2;background:#0c2340;">1</div>
 <div class="step-title" style="color:#e0f0ff;">Input Stage</div>
 <p class="step-desc" style="color:rgba(224,240,255,.45);">Provide layout parameters manually — length, width, bedrooms — or let real-time sensor data do it automatically.</p>
 </div>
+
 <div class="step-item sr">
 <div class="step-num" style="border-color:#0891b2;color:#0891b2;background:#0c2340;">2</div>
 <div class="step-title" style="color:#e0f0ff;">Generation Stage</div>
 <p class="step-desc" style="color:rgba(224,240,255,.45);">The GAN generator synthesizes a floor plan. Simultaneously, the Optimized Layout module computes rule-based arrangements.</p>
 </div>
+
 <div class="step-item sr">
 <div class="step-num" style="border-color:#0891b2;color:#0891b2;background:#0c2340;">3</div>
 <div class="step-title" style="color:#e0f0ff;">Segmentation</div>
 <p class="step-desc" style="color:rgba(224,240,255,.45);">The generated plan passes through the segmentation model, producing a wall-highlighted binary mask for structural clarity.</p>
 </div>
+
 <div class="step-item sr">
 <div class="step-num" style="border-color:#0891b2;color:#0891b2;background:#0c2340;">4</div>
 <div class="step-title" style="color:#e0f0ff;">Visualization</div>
 <p class="step-desc" style="color:rgba(224,240,255,.45);">Results render with download options, denoising controls, and 3D modeling output.</p>
 </div>
+
 </div>
 </section>
+
 <!-- TECH -->
+
 <section class="section" id="tech">
 <div class="sec-tag sr">03 — Stack</div>
 <h2 class="sec-h2 sr">Built with<br/>real tools.</h2>
+
 <div class="tech-pills sr">
-<div class="pill">Python 3.10</div><div class="pill">PyTorch</div><div class="pill">scikit-learn</div>
-<div class="pill">Streamlit</div><div class="pill">OpenCV</div><div class="pill">Matplotlib</div>
-<div class="pill">Plotly</div><div class="pill">Arduino Mega 2560</div><div class="pill">ESP32</div>
-<div class="pill">HC-SR04</div><div class="pill">HC-SR501 PIR</div><div class="pill">FCN-ResNet50</div>
-<div class="pill">Random Forest</div><div class="pill">DCGAN</div><div class="pill">Adam Optimizer</div>
-<div class="pill">Groq API</div><div class="pill">Llama 3.1</div><div class="pill">C++</div>
+<div class="pill">Python 3.10</div>
+<div class="pill">PyTorch</div>
+<div class="pill">scikit-learn</div>
+<div class="pill">Streamlit</div>
+<div class="pill">OpenCV</div>
+<div class="pill">Matplotlib</div>
+<div class="pill">Plotly</div>
+<div class="pill">Arduino Mega 2560</div>
+<div class="pill">ESP32</div>
+<div class="pill">HC-SR04</div>
+<div class="pill">HC-SR501 PIR</div>
+<div class="pill">FCN-ResNet50</div>
+<div class="pill">Random Forest</div>
+<div class="pill">DCGAN</div>
+<div class="pill">Adam Optimizer</div>
+<div class="pill">Groq API</div>
+<div class="pill">Llama 3.1</div>
+<div class="pill">C++</div>
 </div>
 </section>
+
 <!-- CTA -->
+
 <div class="cta-section">
 <div class="cta-wm">ARCH-AI-TEX</div>
+
 <div class="cta-inner sr">
 <h2>Try it <em style="font-style:italic;color:var(--rust)">now.</em></h2>
 <p>Enter your dimensions and watch the GAN generate a floor plan. No install needed.</p>
 <button class="btn-p" onclick="scrollToApp()">Open Demo App →</button>
 </div>
 </div>
+
 <footer>
 <div class="footer-logo">Arch<span>·</span>Ai<span>·</span>Tex</div>
+
 <ul class="footer-links">
 <li><a href="https://arch-ai-tex.streamlit.app/" target="_blank">Full App</a></li>
 <li><a href="https://arch-ai-tex-new.streamlit.app/" target="_blank">Basic App</a></li>
 <li><a href="https://github.com/Aravkataria/Arch-Ai-Tex" target="_blank">GitHub</a></li>
 </ul>
+
 <div class="footer-c">© 2025 Arch-Ai-Tex · MIT License</div>
 </footer>
 
-<script src="main.js"></script></body>
+<script src="main.js"></script>
+
+</body>
 </html>
