@@ -15,9 +15,9 @@
 
 <p align="center">
   <strong>
-    <a href="https://aravkataria.github.io/Arch-Ai-Tex/">🌐 Visit the Project Website</a>
+    <a href="https://aravkataria.github.io/Arch-Ai-Tex/">Visit the Project Website</a>
     &nbsp; • &nbsp;
-    <a href="https://github.com/Aravkataria/Arch-Ai-Tex">💻 View the Source Code</a>
+    <a href="https://github.com/Aravkataria/Arch-Ai-Tex">View the Source Code</a>
   </strong>
 </p>
 
