@@ -1,5 +1,6 @@
-# Arch-Ai-Tex  
-## House-Floor-Generator
+# Arch-Ai-Tex
+
+> AI-powered architectural floor plan generation using GANs, optimized layouts, computer vision, and real-time IoT sensors.
 
 <h1 align="center">
   <a href="https://aravkataria.github.io/Arch-Ai-Tex/">Arch-Ai-Tex</a>
