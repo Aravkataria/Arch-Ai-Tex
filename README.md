@@ -13,6 +13,45 @@
   <img src="https://img.shields.io/github/forks/Aravkataria/Arch-Ai-Tex?style=for-the-badge&color=00bfff" />
 </p>
 
+<p align="center">
+  <strong>
+    <a href="https://aravkataria.github.io/Arch-Ai-Tex/">🌐 Visit the Project Website</a>
+    &nbsp; • &nbsp;
+    <a href="https://github.com/Aravkataria/Arch-Ai-Tex">💻 View the Source Code</a>
+  </strong>
+</p>
+
+---
+
+## Project Website
+
+**[Visit the Arch-Ai-Tex Website →](https://aravkataria.github.io/Arch-Ai-Tex/)**
+
+The official project website provides the main interactive experience, project overview, demonstrations, and AI-powered floor plan generation.
+
+## GitHub Repository
+
+**This is the official Arch-Ai-Tex source-code repository.**
+
+This repository contains the source code, AI/ML components, floor-plan generation system, optimization modules, IoT integrations, experiments, and technical documentation.
+
+If you are looking for the **Arch-Ai-Tex GitHub repository, source code, implementation, or technical documentation**, you are in the right place.
+
+## What is Arch-Ai-Tex?
+
+Arch-Ai-Tex is an AI-powered architectural design system that combines
+GAN-based floor plan generation, intelligent spatial optimization,
+computer vision, and real-time IoT sensing.
+
+### Key Components
+
+- GAN-based floor plan generation
+- Intelligent spatial layout optimization
+- Computer vision
+- Real-time IoT sensor integration
+- AI-powered interaction
+- Python, PyTorch, JavaScript, and embedded systems
+
 ## Table of Contents  
 1. [Project Overview](#project-overview)  
 2. [Motivation](#motivation)  
